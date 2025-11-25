@@ -1,134 +1,268 @@
-// app/index.tsx
-import React from 'react';
-import { View, ScrollView, Dimensions, StyleSheet } from 'react-native';
-import { Text, ProgressBar, Surface, TouchableRipple } from 'react-native-paper';
+// app/modules/kana/index.tsx
+import React, { useState } from 'react';
+import { View, ScrollView, Dimensions } from 'react-native';
+import { Text, Surface, TouchableRipple } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-const levels = [
-  { id: 'n5', title: 'N5', sub: 'Básico',       color: '#22c55e', kanji: '始' },
-  { id: 'n4', title: 'N4', sub: 'Elemental',    color: '#0ea5e9', kanji: '基' },
-  { id: 'n3', title: 'N3', sub: 'Intermedio',   color: '#eab308', kanji: '中' },
-  { id: 'n2', title: 'N2', sub: 'Avanzado',     color: '#f97316', kanji: '上' },
-  { id: 'n1', title: 'N1', sub: 'Experto',      color: '#ef4444', kanji: '神' },
+// --- ESTRUCTURA DE DATOS ---
+
+type KanaChar = { char: string; romaji: string };
+type KanaGroup = { title: string; data: KanaChar[] };
+
+const HIRAGANA_DATA: KanaGroup[] = [
+  {
+    title: '清音', // Seion
+    data: [
+      { char: 'あ', romaji: 'a' }, { char: 'い', romaji: 'i' }, { char: 'う', romaji: 'u' }, { char: 'え', romaji: 'e' }, { char: 'お', romaji: 'o' },
+      { char: 'か', romaji: 'ka' }, { char: 'き', romaji: 'ki' }, { char: 'く', romaji: 'ku' }, { char: 'け', romaji: 'ke' }, { char: 'こ', romaji: 'ko' },
+      { char: 'さ', romaji: 'sa' }, { char: 'し', romaji: 'shi' }, { char: 'す', romaji: 'su' }, { char: 'せ', romaji: 'se' }, { char: 'そ', romaji: 'so' },
+      { char: 'た', romaji: 'ta' }, { char: 'ち', romaji: 'chi' }, { char: 'つ', romaji: 'tsu' }, { char: 'て', romaji: 'te' }, { char: 'と', romaji: 'to' },
+      { char: 'な', romaji: 'na' }, { char: 'に', romaji: 'ni' }, { char: 'ぬ', romaji: 'nu' }, { char: 'ね', romaji: 'ne' }, { char: 'の', romaji: 'no' },
+      { char: 'は', romaji: 'ha' }, { char: 'ひ', romaji: 'hi' }, { char: 'ふ', romaji: 'fu' }, { char: 'へ', romaji: 'he' }, { char: 'ほ', romaji: 'ho' },
+      { char: 'ま', romaji: 'ma' }, { char: 'み', romaji: 'mi' }, { char: 'む', romaji: 'mu' }, { char: 'め', romaji: 'me' }, { char: 'も', romaji: 'mo' },
+      { char: 'や', romaji: 'ya' }, { char: '', romaji: '' }, { char: 'ゆ', romaji: 'yu' }, { char: '', romaji: '' }, { char: 'よ', romaji: 'yo' },
+      { char: 'ら', romaji: 'ra' }, { char: 'り', romaji: 'ri' }, { char: 'る', romaji: 'ru' }, { char: 'れ', romaji: 're' }, { char: 'ろ', romaji: 'ro' },
+      { char: 'わ', romaji: 'wa' }, { char: '', romaji: '' }, { char: 'を', romaji: 'wo' }, { char: '', romaji: '' }, { char: 'ん', romaji: 'n' },
+    ]
+  },
+  {
+    title: '濁音', // Dakuon
+    data: [
+      { char: 'が', romaji: 'ga' }, { char: 'ぎ', romaji: 'gi' }, { char: 'ぐ', romaji: 'gu' }, { char: 'げ', romaji: 'ge' }, { char: 'ご', romaji: 'go' },
+      { char: 'ざ', romaji: 'za' }, { char: 'じ', romaji: 'ji' }, { char: 'ず', romaji: 'zu' }, { char: 'ぜ', romaji: 'ze' }, { char: 'ぞ', romaji: 'zo' },
+      { char: 'だ', romaji: 'da' }, { char: 'ぢ', romaji: 'ji' }, { char: 'づ', romaji: 'zu' }, { char: 'で', romaji: 'de' }, { char: 'ど', romaji: 'do' },
+      { char: 'ば', romaji: 'ba' }, { char: 'び', romaji: 'bi' }, { char: 'ぶ', romaji: 'bu' }, { char: 'べ', romaji: 'be' }, { char: 'ぼ', romaji: 'bo' },
+    ]
+  },
+  {
+    title: '半濁音', // Handakuon
+    data: [
+      { char: 'ぱ', romaji: 'pa' }, { char: 'ぴ', romaji: 'pi' }, { char: 'ぷ', romaji: 'pu' }, { char: 'ぺ', romaji: 'pe' }, { char: 'ぽ', romaji: 'po' },
+    ]
+  },
+  {
+    title: '拗音', // Yoon
+    data: [
+      { char: 'きゃ', romaji: 'kya' }, { char: 'きゅ', romaji: 'kyu' }, { char: 'きょ', romaji: 'kyo' },
+      { char: 'しゃ', romaji: 'sha' }, { char: 'しゅ', romaji: 'shu' }, { char: 'しょ', romaji: 'sho' },
+      { char: 'ちゃ', romaji: 'cha' }, { char: 'ちゅ', romaji: 'chu' }, { char: 'ちょ', romaji: 'cho' },
+      { char: 'にゃ', romaji: 'nya' }, { char: 'にゅ', romaji: 'nyu' }, { char: 'にょ', romaji: 'nyo' },
+      { char: 'ひゃ', romaji: 'hya' }, { char: 'ひゅ', romaji: 'hyu' }, { char: 'ひょ', romaji: 'hyo' },
+      { char: 'みゃ', romaji: 'mya' }, { char: 'みゅ', romaji: 'myu' }, { char: 'みょ', romaji: 'myo' },
+      { char: 'りゃ', romaji: 'rya' }, { char: 'りゅ', romaji: 'ryu' }, { char: 'りょ', romaji: 'ryo' },
+      { char: 'ぎゃ', romaji: 'gya' }, { char: 'ぎゅ', romaji: 'gyu' }, { char: 'ぎょ', romaji: 'gyo' },
+      { char: 'じゃ', romaji: 'ja' },  { char: 'じゅ', romaji: 'ju' },  { char: 'じょ', romaji: 'jo' },
+      { char: 'びゃ', romaji: 'bya' }, { char: 'びゅ', romaji: 'byu' }, { char: 'びょ', romaji: 'byo' },
+      { char: 'ぴゃ', romaji: 'pya' }, { char: 'ぴゅ', romaji: 'pyu' }, { char: 'ぴょ', romaji: 'pyo' },
+    ]
+  },
+  {
+    title: '促音', // Sokuon
+    data: [
+      { char: 'っ', romaji: 'tt' }
+    ]
+  }
 ];
 
-export default function HomeScreen() {
-  const router = useRouter();
-  
-  const { width } = Dimensions.get('window');
-  const gap = 16;
-  const padding = 24;
-  const availableWidth = width - (padding * 2) - gap;
-  const cardWidth = availableWidth / 2;
+const KATAKANA_DATA: KanaGroup[] = [
+  {
+    title: '清音', // Seion
+    data: [
+      { char: 'ア', romaji: 'a' }, { char: 'イ', romaji: 'i' }, { char: 'ウ', romaji: 'u' }, { char: 'エ', romaji: 'e' }, { char: 'オ', romaji: 'o' },
+      { char: 'カ', romaji: 'ka' }, { char: 'キ', romaji: 'ki' }, { char: 'ク', romaji: 'ku' }, { char: 'ケ', romaji: 'ke' }, { char: 'コ', romaji: 'ko' },
+      { char: 'サ', romaji: 'sa' }, { char: 'シ', romaji: 'shi' }, { char: 'ス', romaji: 'su' }, { char: 'セ', romaji: 'se' }, { char: 'ソ', romaji: 'so' },
+      { char: 'タ', romaji: 'ta' }, { char: 'チ', romaji: 'chi' }, { char: 'ツ', romaji: 'tsu' }, { char: 'テ', romaji: 'te' }, { char: 'ト', romaji: 'to' },
+      { char: 'ナ', romaji: 'na' }, { char: 'ニ', romaji: 'ni' }, { char: 'ヌ', romaji: 'nu' }, { char: 'ネ', romaji: 'ne' }, { char: 'ノ', romaji: 'no' },
+      { char: 'ハ', romaji: 'ha' }, { char: 'ヒ', romaji: 'hi' }, { char: 'フ', romaji: 'fu' }, { char: 'ヘ', romaji: 'he' }, { char: 'ホ', romaji: 'ho' },
+      { char: 'マ', romaji: 'ma' }, { char: 'ミ', romaji: 'mi' }, { char: 'ム', romaji: 'mu' }, { char: 'メ', romaji: 'me' }, { char: 'モ', romaji: 'mo' },
+      { char: 'ヤ', romaji: 'ya' }, { char: '', romaji: '' }, { char: 'ユ', romaji: 'yu' }, { char: '', romaji: '' }, { char: 'ヨ', romaji: 'yo' },
+      { char: 'ラ', romaji: 'ra' }, { char: 'リ', romaji: 'ri' }, { char: 'ル', romaji: 'ru' }, { char: 'レ', romaji: 're' }, { char: 'ロ', romaji: 'ro' },
+      { char: 'ワ', romaji: 'wa' }, { char: '', romaji: '' }, { char: 'ヲ', romaji: 'wo' }, { char: '', romaji: '' }, { char: 'ン', romaji: 'n' },
+    ]
+  },
+  {
+    title: '濁音', // Dakuon
+    data: [
+      { char: 'ガ', romaji: 'ga' }, { char: 'ギ', romaji: 'gi' }, { char: 'グ', romaji: 'gu' }, { char: 'ゲ', romaji: 'ge' }, { char: 'ゴ', romaji: 'go' },
+      { char: 'ザ', romaji: 'za' }, { char: 'ジ', romaji: 'ji' }, { char: 'ズ', romaji: 'zu' }, { char: 'ゼ', romaji: 'ze' }, { char: 'ゾ', romaji: 'zo' },
+      { char: 'ダ', romaji: 'da' }, { char: 'ヂ', romaji: 'ji' }, { char: 'ヅ', romaji: 'zu' }, { char: 'デ', romaji: 'de' }, { char: 'ド', romaji: 'do' },
+      { char: 'バ', romaji: 'ba' }, { char: 'ビ', romaji: 'bi' }, { char: 'ブ', romaji: 'bu' }, { char: 'ベ', romaji: 'be' }, { char: 'ボ', romaji: 'bo' },
+    ]
+  },
+  {
+    title: '半濁音', // Handakuon
+    data: [
+      { char: 'パ', romaji: 'pa' }, { char: 'ピ', romaji: 'pi' }, { char: 'プ', romaji: 'pu' }, { char: 'ペ', romaji: 'pe' }, { char: 'ポ', romaji: 'po' },
+    ]
+  },
+  {
+    title: '拗音', // Yoon
+    data: [
+      { char: 'キャ', romaji: 'kya' }, { char: 'キュ', romaji: 'kyu' }, { char: 'キョ', romaji: 'kyo' },
+      { char: 'シャ', romaji: 'sha' }, { char: 'シュ', romaji: 'shu' }, { char: 'ショ', romaji: 'sho' },
+      { char: 'チャ', romaji: 'cha' }, { char: 'チュ', romaji: 'chu' }, { char: 'チョ', romaji: 'cho' },
+      { char: 'ニャ', romaji: 'nya' }, { char: 'ニュ', romaji: 'nyu' }, { char: 'ニョ', romaji: 'nyo' },
+      { char: 'ヒャ', romaji: 'hya' }, { char: 'ヒュ', romaji: 'hyu' }, { char: 'ヒョ', romaji: 'hyo' },
+      { char: 'ミャ', romaji: 'mya' }, { char: 'ミュ', romaji: 'myu' }, { char: 'ミョ', romaji: 'myo' },
+      { char: 'リャ', romaji: 'rya' }, { char: 'リュ', romaji: 'ryu' }, { char: 'リョ', romaji: 'ryo' },
+      { char: 'ギャ', romaji: 'gya' }, { char: 'ギュ', romaji: 'gyu' }, { char: 'ギョ', romaji: 'gyo' },
+      { char: 'ジャ', romaji: 'ja' },  { char: 'ジュ', romaji: 'ju' },  { char: 'ジョ', romaji: 'jo' },
+      { char: 'ビャ', romaji: 'bya' }, { char: 'ビュ', romaji: 'byu' }, { char: 'ビョ', romaji: 'byo' },
+      { char: 'ピャ', romaji: 'pya' }, { char: 'ピュ', romaji: 'pyu' }, { char: 'ピョ', romaji: 'pyo' },
+    ]
+  },
+  {
+    title: '促音', // Sokuon
+    data: [
+      { char: 'ッ', romaji: 'tt' }
+    ]
+  }
+];
 
-  const handleLevelPress = (id: string) => {
-    router.push({ pathname: '/levels/[id]', params: { id } });
-  };
+export default function KanaScreen() {
+  const [mode, setMode] = useState<'hiragana' | 'katakana'>('hiragana');
+  const router = useRouter();
+  const { width } = Dimensions.get('window');
+  
+  const activeData = mode === 'hiragana' ? HIRAGANA_DATA : KATAKANA_DATA;
+  const activeColor = mode === 'hiragana' ? '#22c55e' : '#0ea5e9';
+
+  // --- CONFIGURACIÓN DE LA GRILLA (3 COLUMNAS) ---
+  const numColumns = 3;
+  const gap = 12;
+  const padding = 20;
+  
+  const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
+  const cardWidth = availableWidth / numColumns;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFAF9' }}>
-      <ScrollView 
-        style={{ flex: 1 }}
-        contentContainerStyle={{ 
-          paddingHorizontal: padding, 
-          paddingVertical: 24, 
-          gap: 24,
-          paddingBottom: 40
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        
-        {/* 1. HEADER */}
-        <View>
-          <Text variant="bodyLarge" style={{ fontFamily: 'NotoSansJP_400Regular', color: '#78716c' }}>
-            こんにちは、
-          </Text>
-          <Text variant="headlineSmall" style={{ fontFamily: 'NotoSansJP_700Bold', color: '#1c1917', fontWeight: 'bold' }}>
-            Estudiante-san
-          </Text>
-        </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFAF9' }} edges={['top']}>
+      <StatusBar style="dark" />
+      <Stack.Screen options={{ headerShown: false }} />
 
-        {/* 2. HERO CARD */}
-        <Surface style={{ borderRadius: 24, backgroundColor: '#B91C1C', overflow: 'hidden' }} elevation={3}>
-          <TouchableRipple onPress={() => handleLevelPress('n5')} style={{ padding: 24 }}>
-            <View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <View>
-                  <Surface style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#991b1b', alignSelf: 'flex-start', marginBottom: 8 }}>
-                    <Text style={{ color: '#fecaca', fontSize: 11, fontWeight: 'bold' }}>CONTINUAR</Text>
-                  </Surface>
-                  <Text variant="headlineMedium" style={{ fontFamily: 'NotoSansJP_700Bold', color: 'white', fontWeight: 'bold', lineHeight: 32 }}>
-                    N5: Hiragana
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="school" size={40} color="rgba(255,255,255,0.9)" />
-              </View>
-              <View style={{ gap: 8 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: '#fecaca', fontSize: 13 }}>Progreso del módulo</Text>
-                  <Text style={{ color: 'white', fontSize: 13, fontWeight: 'bold' }}>25%</Text>
-                </View>
-                <ProgressBar progress={0.25} color="white" style={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.3)' }} />
-              </View>
+      {/* Espaciador superior en lugar del Header eliminado */}
+      <View style={{ height: 24 }} />
+
+      {/* SELECTOR DE MODO (Dimensiones reducidas) */}
+      <View style={{ paddingHorizontal: padding, marginBottom: 16 }}>
+        <Surface style={{ 
+          flexDirection: 'row', 
+          backgroundColor: '#e5e5e5', 
+          borderRadius: 16, 
+          padding: 3, // Reducido de 4 a 3
+          overflow: 'hidden'
+        }} elevation={0} mode="flat">
+          
+          {/* Hiragana Toggle */}
+          <TouchableRipple 
+            onPress={() => setMode('hiragana')} 
+            style={{ flex: 1, borderRadius: 14, overflow: 'hidden' }}
+          >
+            <View style={{ 
+              backgroundColor: mode === 'hiragana' ? 'white' : 'transparent',
+              paddingVertical: 4, // Reducido de 6 a 4 para hacerlo más delgado
+              alignItems: 'center',
+              borderRadius: 14,
+              elevation: mode === 'hiragana' ? 1 : 0
+            }}>
+              <Text style={{ 
+                fontFamily: 'NotoSansJP_700Bold', 
+                color: mode === 'hiragana' ? '#22c55e' : '#78716c',
+                fontSize: 15 // Ajuste ligero de fuente para equilibrar
+              }}>
+                ひらがな
+              </Text>
             </View>
           </TouchableRipple>
+
+          {/* Katakana Toggle */}
+          <TouchableRipple 
+            onPress={() => setMode('katakana')} 
+            style={{ flex: 1, borderRadius: 14, overflow: 'hidden' }}
+          >
+            <View style={{ 
+              backgroundColor: mode === 'katakana' ? 'white' : 'transparent',
+              paddingVertical: 4, // Reducido de 6 a 4
+              alignItems: 'center',
+              borderRadius: 14,
+              elevation: mode === 'katakana' ? 1 : 0
+            }}>
+              <Text style={{ 
+                fontFamily: 'NotoSansJP_700Bold', 
+                color: mode === 'katakana' ? '#0ea5e9' : '#78716c',
+                fontSize: 15
+              }}>
+                カタカナ
+              </Text>
+            </View>
+          </TouchableRipple>
+
         </Surface>
+      </View>
 
-        {/* 3. GRID DE NIVELES */}
-        <View>
-          <Text variant="titleLarge" style={{ fontFamily: 'NotoSansJP_700Bold', color: '#44403c', fontWeight: 'bold', marginBottom: 16 }}>
-            Mapa de Aprendizaje
-          </Text>
-          
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gap }}>
-            {levels.map((level) => (
-              <LevelCard 
-                key={level.id} 
-                level={level} 
-                width={cardWidth} 
-                onPress={() => handleLevelPress(level.id)} 
-              />
-            ))}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: padding, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {activeData.map((group, groupIndex) => (
+          <View key={groupIndex} style={{ marginBottom: 32 }}>
+            
+            <Text variant="titleMedium" style={{ fontFamily: 'NotoSansJP_700Bold', color: '#57534e', marginBottom: 16, marginLeft: 4 }}>
+              {group.title}
+            </Text>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gap }}>
+              {group.data.map((item, index) => {
+                if (!item.char) {
+                  return <View key={index} style={{ width: cardWidth, height: cardWidth }} />;
+                }
+
+                return (
+                  <Surface
+                    key={index}
+                    mode="flat"
+                    style={{
+                      width: cardWidth,
+                      height: cardWidth,
+                      borderRadius: 20,
+                      backgroundColor: 'white',
+                      borderWidth: 1,
+                      borderColor: '#e5e5e5',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <TouchableRipple 
+                      style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => {
+                        // "as any" evita el error de tipado hasta que se regeneren las rutas
+                        router.push({ pathname: '/modules/kana/practice/[char]' as any, params: { char: item.char } });
+                      }}
+                    >
+                      <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                        <Text style={{ 
+                          fontFamily: 'NotoSansJP_400Regular', 
+                          fontSize: 42, 
+                          color: '#1c1917',
+                          lineHeight: 50
+                        }}>
+                          {item.char}
+                        </Text>
+                        <Text style={{ 
+                          fontSize: 14, 
+                          color: activeColor, 
+                          fontWeight: 'bold',
+                          marginTop: -4
+                        }}>
+                          {item.romaji}
+                        </Text>
+                      </View>
+                    </TouchableRipple>
+                  </Surface>
+                );
+              })}
+            </View>
           </View>
-        </View>
-
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const LevelCard = ({ level, onPress, width }: { level: any, onPress: () => void, width: number }) => (
-  <Surface style={{ width: width, height: 110, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e5e5', overflow: 'hidden' }} elevation={0} mode="flat">
-    <TouchableRipple onPress={onPress} style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
-        
-        {/* CAPA FONDO: Kanji Centrado Verticalmente */}
-        {/* StyleSheet.absoluteFill hace que ocupe todo el espacio de la tarjeta, ignorando el padding del contenido */}
-        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'flex-end', paddingRight: 8 }]}>
-          <Text style={{ 
-            fontSize: 40, // Hice el kanji un poco más grande para que luzca mejor centrado
-            opacity: 0.07, 
-            color: 'black', 
-            fontFamily: 'NotoSansJP_400Regular',
-            lineHeight: 50 // Importante para centrado vertical preciso de la fuente
-          }}>
-            {level.kanji}
-          </Text>
-        </View>
-
-        {/* CAPA CONTENIDO: Textos (encima del fondo) */}
-        <View style={{ flex: 1, padding: 16, justifyContent: 'space-between' }}>
-          <View>
-            <Text variant="headlineSmall" style={{ color: level.color, fontWeight: '900' }}>{level.title}</Text>
-          </View>
-          <View>
-            <Text variant="titleMedium" style={{ color: '#57534e', fontWeight: 'bold' }}>{level.sub}</Text>
-          </View>
-        </View>
-
-      </View>
-    </TouchableRipple>
-  </Surface>
-);

@@ -8,25 +8,8 @@ import { StatusBar } from 'expo-status-bar';
 import { 
   Play, 
   Lock, 
-  Trophy,
-  BookOpen, 
-  Languages, 
-  Ear, 
-  Mic, 
-  PenTool, 
-  Puzzle 
+  Trophy // Volvemos a usar el Trofeo
 } from 'lucide-react-native';
-
-// Mapeo de iconos para uso interno
-const IconMap: Record<string, any> = {
-  'kana': Languages,
-  'vocab': BookOpen,
-  'grammar': Puzzle,
-  'listening': Ear,
-  'reading': BookOpen,
-  'speaking': Mic,
-  'writing': PenTool,
-};
 
 const levelsData: Record<string, any> = {
   n5: {
@@ -67,7 +50,6 @@ export default function LevelDetailScreen() {
       router.push('/modules/kana');
     } else {
       console.log('Navegar a módulo:', module.title);
-      // Aquí agregarás más 'else if' para los otros módulos cuando los creemos
     }
   };
 
@@ -173,7 +155,7 @@ const ModuleCard = ({ module, themeColor, onPress }: { module: any, themeColor: 
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, justifyContent: 'space-between' }}>
             
-            {/* CONTENIDO TEXTO */}
+            {/* CONTENIDO TEXTO (Izquierda limpia) */}
             <View style={{ flex: 1, paddingRight: 16 }}>
               <Text variant="titleMedium" numberOfLines={1} style={{ 
                 fontWeight: 'bold', 
@@ -189,12 +171,13 @@ const ModuleCard = ({ module, themeColor, onPress }: { module: any, themeColor: 
               </Text>
             </View>
 
-            {/* ACCIÓN / ESTADO */}
+            {/* ACCIÓN / ESTADO (Derecha) */}
             <View style={{ justifyContent: 'center', alignItems: 'center' }}>
               {isCompleted ? (
+                // Usamos Trophy pero sin 'fill' para mantener el estilo outline
                 <Trophy size={32} color={themeColor} strokeWidth={2} />
               ) : isInProgress ? (
-                <Play size={32} color={themeColor} fill={themeColor} />
+                <Play size={32} color={themeColor} strokeWidth={2.5} style={{ marginLeft: 2 }} />
               ) : (
                 <Lock size={28} color="#d6d3d1" strokeWidth={2} />
               )}
