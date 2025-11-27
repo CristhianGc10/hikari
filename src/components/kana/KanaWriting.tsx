@@ -1,38 +1,68 @@
+// src/components/kana/KanaWriting.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { View, PanResponder, StyleSheet } from "react-native";
-import { Surface, IconButton, Text, Button } from "react-native-paper";
+import { View, PanResponder, StyleSheet, Pressable } from "react-native";
+import { Surface, Text } from "react-native-paper";
 import Svg, { Path, G } from "react-native-svg";
 import { svgPathProperties } from "svg-path-properties";
+import { Undo2, Trash2, Eye, EyeOff, ClipboardCheck } from "lucide-react-native";
 
 type KanaWritingProps = {
   strokes: string[];
   size: number;
-  onComplete?: () => void;
+  strokeWidth?: number; // Grosor de trazo opcional (para caracteres combinados)
+  onComplete?: (score: number) => void;
 };
 
 type Point = { x: number; y: number };
 
-// --- CONSTANTES ---
+type StrokeScore = {
+  startAccuracy: number;
+  endAccuracy: number;
+  pathAccuracy: number;
+  lengthAccuracy: number;
+  directionAccuracy: number;
+  total: number;
+};
+
+// --- CONSTANTES DE DISEÑO ---
 const GUIDELINE_COLOR = "#e5e5e5";
 const STROKE_COLOR = "#1c1917";
-const STROKE_WIDTH = 6;
+const DEFAULT_STROKE_WIDTH = 6;
 const CANVAS_VIEWBOX = 109;
 const CARD_PADDING = 20;
 
-// Validación “al máximo” (muy estricta)
-const MIN_POINTS_PER_STROKE = 18;       // requiere muchos puntos
-const START_TOLERANCE = 6;              // inicio casi exacto
-const END_TOLERANCE = 6;                // fin casi exacto
-const LENGTH_MIN_RATIO = 0.95;          // longitud muy parecida
-const LENGTH_MAX_RATIO = 1.05;
+// Colores de botones
+const COLORS = {
+  undo: "#F5A238",
+  clear: "#EF4444",
+  guide: "#3B82F6",
+  validate: "#10B981",
+};
 
-const TARGET_SAMPLES = 90;              // muestreo denso de la guía
-const USER_SAMPLES_MAX = 200;
-const ON_PATH_TOLERANCE = 4.5;          // distancia máx para considerar “sobre la guía”
-const HAUSDORFF_MAX = 5.0;              // distancia máxima permitida (estricto)
-const MONOTONIC_MIN_RATIO = 0.9;        // 90 % de los puntos del usuario deben avanzar
+// --- CONSTANTES DE VALIDACIÓN (Alta precisión 90-95%) ---
+const MIN_POINTS_PER_STROKE = 15;
+const START_TOLERANCE = 6;
+const END_TOLERANCE = 6;
+const LENGTH_MIN_RATIO = 0.85;
+const LENGTH_MAX_RATIO = 1.15;
+const TARGET_SAMPLES = 80;
+const USER_SAMPLES_MAX = 180;
+const HAUSDORFF_MAX = 6;
+const MONOTONIC_MIN_RATIO = 0.88;
 
-// Helper: downsample
+// Pesos para el puntaje
+const WEIGHTS = {
+  start: 0.15,
+  end: 0.15,
+  path: 0.35,
+  length: 0.15,
+  direction: 0.20,
+};
+
+// Umbral de aprobación
+const PASSING_SCORE = 85;
+
+// --- HELPERS ---
 const downsamplePoints = (points: Point[], maxPoints: number): Point[] => {
   if (points.length <= maxPoints) return points;
   const result: Point[] = [];
@@ -43,239 +73,277 @@ const downsamplePoints = (points: Point[], maxPoints: number): Point[] => {
   return result;
 };
 
-export const KanaWriting = ({ strokes, size, onComplete }: KanaWritingProps) => {
-  const [currentStrokeIndex, setCurrentStrokeIndex] = useState(0);
-  const [userPath, setUserPath] = useState<string>("");
-  const [completedPaths, setCompletedPaths] = useState<string[]>([]);
+const pathStringToPoints = (pathStr: string): Point[] => {
+  const points: Point[] = [];
+  const commands = pathStr.match(/[ML]\s*[\d.]+\s*[\d.]+/g);
+  if (!commands) return points;
+  
+  for (const cmd of commands) {
+    const nums = cmd.match(/[\d.]+/g);
+    if (nums && nums.length >= 2) {
+      points.push({ x: parseFloat(nums[0]), y: parseFloat(nums[1]) });
+    }
+  }
+  return points;
+};
+
+const calculatePathLength = (points: Point[]): number => {
+  let length = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    length += Math.hypot(dx, dy);
+  }
+  return length;
+};
+
+const distance = (p1: Point, p2: Point): number => {
+  return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+};
+
+const normalize = (value: number, maxBad: number): number => {
+  return Math.max(0, Math.min(100, 100 - (value / maxBad) * 100));
+};
+
+export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH, onComplete }: KanaWritingProps) => {
+  const [userStrokes, setUserStrokes] = useState<string[]>([]);
+  const [currentPath, setCurrentPath] = useState<string>("");
   const [strokeColor, setStrokeColor] = useState<string>(STROKE_COLOR);
-  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>(
-    { width: CANVAS_VIEWBOX, height: CANVAS_VIEWBOX }
-  );
+  const [showGuide, setShowGuide] = useState(true);
+  const [validationResult, setValidationResult] = useState<"success" | "error" | null>(null);
+  const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: CANVAS_VIEWBOX, height: CANVAS_VIEWBOX });
 
-  const isFinished = currentStrokeIndex >= strokes.length;
   const currentPoints = useRef<Point[]>([]);
+  const currentStrokeIndex = userStrokes.length;
+  const isFinished = validationResult === "success";
+  const canValidate = userStrokes.length === strokes.length;
 
-  // Área cuadrada donde se dibuja el kana, centrada dentro de la tarjeta
   const innerTargetSize = size - CARD_PADDING * 2;
 
   useEffect(() => {
-    resetCanvas();
+    resetAll();
   }, [strokes]);
 
-  const resetCanvas = () => {
-    setCurrentStrokeIndex(0);
-    setCompletedPaths([]);
-    setUserPath("");
+  const resetAll = () => {
+    setUserStrokes([]);
+    setCurrentPath("");
     setStrokeColor(STROKE_COLOR);
+    setValidationResult(null);
+    setFinalScore(null);
     currentPoints.current = [];
   };
 
-  const targetProps = useMemo(() => {
-    if (isFinished || !strokes[currentStrokeIndex]) return null;
-    return new svgPathProperties(strokes[currentStrokeIndex]);
-  }, [strokes, currentStrokeIndex, isFinished]);
-
-  // --- VALIDACIÓN: “trazado igual a la guía” ---
-  const validateStroke = () => {
-    const rawPoints = currentPoints.current;
-
-    if (!targetProps || rawPoints.length < MIN_POINTS_PER_STROKE) {
-      handleError();
-      return;
+  const undoLastStroke = () => {
+    if (userStrokes.length > 0) {
+      setUserStrokes(prev => prev.slice(0, -1));
+      setValidationResult(null);
+      setFinalScore(null);
     }
+  };
 
-    const targetLength = targetProps.getTotalLength();
+  const toggleGuide = () => {
+    setShowGuide(prev => !prev);
+  };
 
-    // Longitud del trazo del usuario
-    let userLength = 0;
-    for (let i = 1; i < rawPoints.length; i++) {
-      const dx = rawPoints[i].x - rawPoints[i - 1].x;
-      const dy = rawPoints[i].y - rawPoints[i - 1].y;
-      userLength += Math.hypot(dx, dy);
-    }
+  // --- VALIDACIÓN AVANZADA ---
+  const validateStroke = (userPathStr: string, targetPathStr: string): StrokeScore | null => {
+    try {
+      const targetProps = new svgPathProperties(targetPathStr);
+      const targetLength = targetProps.getTotalLength();
 
-    const lengthRatio = userLength / targetLength;
-    if (lengthRatio < LENGTH_MIN_RATIO || lengthRatio > LENGTH_MAX_RATIO) {
-      handleError();
-      return;
-    }
+      const userPoints = pathStringToPoints(userPathStr);
+      if (userPoints.length < MIN_POINTS_PER_STROKE) {
+        return null;
+      }
 
-    // Inicio casi exacto
-    const startTarget = targetProps.getPointAtLength(0);
-    const startUser = rawPoints[0];
-    const distStart = Math.hypot(
-      startUser.x - startTarget.x,
-      startUser.y - startTarget.y
-    );
-    if (distStart > START_TOLERANCE) {
-      handleError();
-      return;
-    }
+      const userLength = calculatePathLength(userPoints);
 
-    // Final casi exacto
-    const endTarget = targetProps.getPointAtLength(targetLength);
-    const endUser = rawPoints[rawPoints.length - 1];
-    const distEnd = Math.hypot(
-      endUser.x - endTarget.x,
-      endUser.y - endTarget.y
-    );
-    if (distEnd > END_TOLERANCE) {
-      handleError();
-      return;
-    }
+      // 1. Precisión del punto de inicio
+      const startTarget = targetProps.getPointAtLength(0);
+      const startUser = userPoints[0];
+      const startDist = distance(startUser, startTarget);
+      const startAccuracy = normalize(startDist, START_TOLERANCE * 2);
 
-    // Muestreamos la guía en TARGET_SAMPLES puntos
-    const targetSamples: Point[] = [];
-    for (let i = 0; i <= TARGET_SAMPLES; i++) {
-      const p = targetProps.getPointAtLength(
-        (targetLength * i) / TARGET_SAMPLES
-      );
-      targetSamples.push({ x: p.x, y: p.y });
-    }
+      // 2. Precisión del punto final
+      const endTarget = targetProps.getPointAtLength(targetLength);
+      const endUser = userPoints[userPoints.length - 1];
+      const endDist = distance(endUser, endTarget);
+      const endAccuracy = normalize(endDist, END_TOLERANCE * 2);
 
-    // Downsample de puntos del usuario
-    const userPoints = downsamplePoints(rawPoints, USER_SAMPLES_MAX);
+      // 3. Precisión de la longitud
+      const lengthRatio = userLength / targetLength;
+      const lengthDeviation = Math.abs(1 - lengthRatio);
+      const lengthAccuracy = normalize(lengthDeviation, 0.3);
 
-    // 1) Distancia usuario → guía y monotonicidad sobre la guía
-    let maxDistUserToTarget = 0;
-    const nearestIdxForUser: number[] = [];
+      // 4. Muestrear la guía objetivo
+      const targetSamples: Point[] = [];
+      for (let i = 0; i <= TARGET_SAMPLES; i++) {
+        const p = targetProps.getPointAtLength((targetLength * i) / TARGET_SAMPLES);
+        targetSamples.push({ x: p.x, y: p.y });
+      }
 
-    for (const up of userPoints) {
-      let minDist = Infinity;
-      let bestIdx = 0;
+      const sampledUser = downsamplePoints(userPoints, USER_SAMPLES_MAX);
 
-      for (let j = 0; j < targetSamples.length; j++) {
-        const tp = targetSamples[j];
-        const dx = up.x - tp.x;
-        const dy = up.y - tp.y;
-        const d = Math.hypot(dx, dy);
-        if (d < minDist) {
-          minDist = d;
-          bestIdx = j;
+      // 5. Distancia Hausdorff bidireccional
+      let maxDistUserToTarget = 0;
+      const nearestIndices: number[] = [];
+
+      for (const up of sampledUser) {
+        let minDist = Infinity;
+        let bestIdx = 0;
+        for (let j = 0; j < targetSamples.length; j++) {
+          const d = distance(up, targetSamples[j]);
+          if (d < minDist) {
+            minDist = d;
+            bestIdx = j;
+          }
+        }
+        maxDistUserToTarget = Math.max(maxDistUserToTarget, minDist);
+        nearestIndices.push(bestIdx);
+      }
+
+      let maxDistTargetToUser = 0;
+      for (const tp of targetSamples) {
+        let minDist = Infinity;
+        for (const up of sampledUser) {
+          const d = distance(up, tp);
+          if (d < minDist) minDist = d;
+        }
+        maxDistTargetToUser = Math.max(maxDistTargetToUser, minDist);
+      }
+
+      const hausdorff = Math.max(maxDistUserToTarget, maxDistTargetToUser);
+      const pathAccuracy = normalize(hausdorff, HAUSDORFF_MAX * 2);
+
+      // 6. Monotonicidad
+      let forwardSteps = 0;
+      for (let i = 1; i < nearestIndices.length; i++) {
+        if (nearestIndices[i] >= nearestIndices[i - 1]) {
+          forwardSteps++;
         }
       }
+      const monotonicRatio = forwardSteps / (nearestIndices.length - 1 || 1);
+      const directionAccuracy = normalize(1 - monotonicRatio, 1 - MONOTONIC_MIN_RATIO);
 
-      maxDistUserToTarget = Math.max(maxDistUserToTarget, minDist);
-      nearestIdxForUser.push(bestIdx);
+      const total =
+        startAccuracy * WEIGHTS.start +
+        endAccuracy * WEIGHTS.end +
+        pathAccuracy * WEIGHTS.path +
+        lengthAccuracy * WEIGHTS.length +
+        directionAccuracy * WEIGHTS.direction;
+
+      return {
+        startAccuracy,
+        endAccuracy,
+        pathAccuracy,
+        lengthAccuracy,
+        directionAccuracy,
+        total,
+      };
+    } catch {
+      return null;
     }
+  };
 
-    // Monotonicidad: el índice de la guía debe aumentar casi siempre
-    let forwardSteps = 0;
-    for (let i = 1; i < nearestIdxForUser.length; i++) {
-      if (nearestIdxForUser[i] >= nearestIdxForUser[i - 1]) {
-        forwardSteps++;
+  const validateDrawing = () => {
+    if (!canValidate) return;
+
+    let totalScore = 0;
+    let validCount = 0;
+
+    for (let i = 0; i < strokes.length; i++) {
+      const score = validateStroke(userStrokes[i], strokes[i]);
+      if (score) {
+        totalScore += score.total;
+        validCount++;
       }
     }
-    const monotonicRatio = forwardSteps / (nearestIdxForUser.length - 1 || 1);
 
-    if (monotonicRatio < MONOTONIC_MIN_RATIO) {
-      handleError();
-      return;
-    }
+    const averageScore = validCount > 0 ? totalScore / strokes.length : 0;
+    const roundedScore = Math.round(averageScore);
+    setFinalScore(roundedScore);
 
-    // 2) Distancia guía → usuario (para asegurar que el usuario recorre todo)
-    let maxDistTargetToUser = 0;
-    for (const tp of targetSamples) {
-      let minDist = Infinity;
-      for (const up of userPoints) {
-        const dx = up.x - tp.x;
-        const dy = up.y - tp.y;
-        const d = Math.hypot(dx, dy);
-        if (d < minDist) minDist = d;
-      }
-      maxDistTargetToUser = Math.max(maxDistTargetToUser, minDist);
-    }
-
-    const hausdorff = Math.max(maxDistUserToTarget, maxDistTargetToUser);
-
-    // Solo aceptamos si la distancia máxima es muy pequeña
-    if (hausdorff <= HAUSDORFF_MAX && maxDistUserToTarget <= ON_PATH_TOLERANCE) {
-      handleSuccess();
+    if (roundedScore >= PASSING_SCORE) {
+      setValidationResult("success");
+      if (onComplete) onComplete(roundedScore);
     } else {
-      handleError();
+      setValidationResult("error");
+      setTimeout(() => {
+        setValidationResult(null);
+        setFinalScore(null);
+      }, 1500);
     }
   };
 
-  const handleSuccess = () => {
-    setStrokeColor("#22c55e");
-
-    setTimeout(() => {
-      const nextIndex = currentStrokeIndex + 1;
-      setCompletedPaths((prev) => [...prev, strokes[currentStrokeIndex]]);
-
-      setUserPath("");
-      currentPoints.current = [];
-      setStrokeColor(STROKE_COLOR);
-
-      if (nextIndex >= strokes.length) {
-        if (onComplete) onComplete();
-      }
-      setCurrentStrokeIndex(nextIndex);
-    }, 150);
-  };
-
-  const handleError = () => {
-    setStrokeColor("#ef4444");
-    setTimeout(() => {
-      setUserPath("");
-      currentPoints.current = [];
-      setStrokeColor(STROKE_COLOR);
-    }, 400);
-  };
-
-  // PanResponder: el trazo se dibuja bajo el dedo
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => !isFinished,
-    onMoveShouldSetPanResponder: () => !isFinished,
+  // PanResponder para dibujar
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => !isFinished && currentStrokeIndex < strokes.length,
+    onMoveShouldSetPanResponder: () => !isFinished && currentStrokeIndex < strokes.length,
 
     onPanResponderGrant: (evt) => {
       const { locationX, locationY } = evt.nativeEvent;
-
       const scaleX = CANVAS_VIEWBOX / canvasSize.width;
       const scaleY = CANVAS_VIEWBOX / canvasSize.height;
-
       const x = locationX * scaleX;
       const y = locationY * scaleY;
 
       currentPoints.current = [{ x, y }];
-      setUserPath(`M ${x} ${y}`);
+      setCurrentPath(`M ${x} ${y}`);
+      setStrokeColor(STROKE_COLOR);
     },
 
     onPanResponderMove: (evt) => {
       const { locationX, locationY } = evt.nativeEvent;
-
       const scaleX = CANVAS_VIEWBOX / canvasSize.width;
       const scaleY = CANVAS_VIEWBOX / canvasSize.height;
-
       const x = locationX * scaleX;
       const y = locationY * scaleY;
 
       currentPoints.current.push({ x, y });
-      setUserPath((prev) => `${prev} L ${x} ${y}`);
+      setCurrentPath(prev => `${prev} L ${x} ${y}`);
     },
 
-    onPanResponderRelease: validateStroke,
-  });
+    onPanResponderRelease: () => {
+      if (currentPath && currentPoints.current.length >= MIN_POINTS_PER_STROKE) {
+        setUserStrokes(prev => [...prev, currentPath]);
+      }
+      setCurrentPath("");
+      currentPoints.current = [];
+    },
+  }), [canvasSize, isFinished, currentStrokeIndex, strokes.length, currentPath]);
+
+  if (!strokes || strokes.length === 0) return null;
+
+  const GAP = 12;
+  const buttonCardSize = (size - GAP) / 2;
+
+  // Color del puntaje según el resultado
+  const getScoreColor = (score: number): string => {
+    if (score >= 95) return "#10B981"; // Verde - Perfecto
+    if (score >= 90) return "#22C55E"; // Verde claro - Excelente
+    if (score >= 85) return "#84CC16"; // Lima - Muy bien (aprobado)
+    if (score >= 75) return "#F5A238"; // Naranja - Bien
+    if (score >= 65) return "#F97316"; // Naranja oscuro - Regular
+    return "#EF4444"; // Rojo - Necesita práctica
+  };
+
+  const getScoreLabel = (score: number): string => {
+    if (score >= 95) return "完璧!"; // Perfecto
+    if (score >= 90) return "素晴らしい!"; // Excelente
+    if (score >= 85) return "合格!"; // Aprobado
+    if (score >= 75) return "もう少し!"; // Un poco más
+    if (score >= 65) return "頑張って!"; // Sigue intentando
+    return "練習しよう!"; // Practiquemos
+  };
 
   return (
-    <View style={{ alignItems: "center", gap: 12 }}>
-      <Surface
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 32,
-          backgroundColor: "white",
-          overflow: "hidden",
-          elevation: 2,
-        }}
-      >
-        {/* Canvas cuadrado centrado */}
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+    <View style={styles.container}>
+      {/* Área de escritura */}
+      <Surface style={[styles.writingCard, { width: size, height: size }]} elevation={1} mode="flat">
+        <View style={styles.canvasContainer}>
           <View
-            style={{
-              width: innerTargetSize,
-              height: innerTargetSize,
-            }}
+            style={{ width: innerTargetSize, height: innerTargetSize }}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
               setCanvasSize({ width, height });
@@ -283,7 +351,7 @@ export const KanaWriting = ({ strokes, size, onComplete }: KanaWritingProps) => 
             {...panResponder.panHandlers}
           >
             <Svg width="100%" height="100%" viewBox="0 0 109 109">
-              {/* Cuadrícula */}
+              {/* Guías de fondo */}
               <G opacity={0.1}>
                 <Path
                   d="M54.5,0 L54.5,109 M0,54.5 L109,54.5"
@@ -293,86 +361,274 @@ export const KanaWriting = ({ strokes, size, onComplete }: KanaWritingProps) => 
                 />
               </G>
 
-              {/* Trazos ya completados */}
-              {completedPaths.map((d, i) => (
+              {/* Guía del kana */}
+              {showGuide && (
+                <G opacity={0.25}>
+                  {strokes.map((d, i) => (
+                    <Path
+                      key={`guide-${i}`}
+                      d={d}
+                      stroke={GUIDELINE_COLOR}
+                      strokeWidth={strokeWidth}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </G>
+              )}
+
+              {/* Trazos completados del usuario */}
+              {userStrokes.map((d, i) => (
                 <Path
-                  key={`completed-${i}`}
+                  key={`user-${i}`}
                   d={d}
-                  stroke={STROKE_COLOR}
-                  strokeWidth={STROKE_WIDTH}
+                  stroke={
+                    validationResult === "success"
+                      ? COLORS.validate
+                      : validationResult === "error"
+                      ? COLORS.clear
+                      : STROKE_COLOR
+                  }
+                  strokeWidth={strokeWidth}
                   fill="none"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               ))}
 
-              {/* Guía del trazo actual */}
-              {!isFinished && strokes[currentStrokeIndex] && (
+              {/* Trazo actual */}
+              {currentPath && (
                 <Path
-                  d={strokes[currentStrokeIndex]}
-                  stroke={GUIDELINE_COLOR}
-                  strokeWidth={STROKE_WIDTH}
+                  d={currentPath}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
                   fill="none"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  opacity={0.9}
                 />
               )}
-
-              {/* Trazo del usuario */}
-              <Path
-                d={userPath}
-                stroke={strokeColor}
-                strokeWidth={STROKE_WIDTH}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={0.9}
-              />
             </Svg>
           </View>
         </View>
 
-        {/* Overlay de éxito */}
-        {isFinished && (
+        {/* Overlay de éxito con puntaje */}
+        {validationResult === "success" && finalScore !== null && (
           <View style={styles.successOverlay}>
-            <Text
-              variant="headlineMedium"
-              style={{
-                color: "#22c55e",
-                fontWeight: "900",
-                marginBottom: 16,
-              }}
-            >
-              正解 (Correcto)
+            <Text style={[styles.scoreText, { color: getScoreColor(finalScore) }]}>
+              {finalScore}点
             </Text>
-            <Button mode="contained" buttonColor="#22c55e" onPress={resetCanvas}>
-              Escribir de nuevo
-            </Button>
+            <Text style={[styles.scoreLabelText, { color: getScoreColor(finalScore) }]}>
+              {getScoreLabel(finalScore)}
+            </Text>
+            <Pressable onPress={resetAll} style={[styles.retryButton, { backgroundColor: getScoreColor(finalScore) }]}>
+              <Text style={styles.retryButtonText}>もう一度</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Overlay de error con puntaje */}
+        {validationResult === "error" && finalScore !== null && (
+          <View style={styles.errorOverlay}>
+            <Text style={styles.errorScoreText}>{finalScore}点</Text>
+            <Text style={styles.errorText}>{getScoreLabel(finalScore)}</Text>
           </View>
         )}
       </Surface>
 
-      {/* Botón de reinicio fuera del área de escritura */}
-      {!isFinished && (
-        <IconButton
-          icon="refresh"
-          size={22}
-          mode="contained"
-          iconColor="#57534e"
-          containerColor="rgba(245, 245, 244, 0.9)"
-          onPress={resetCanvas}
-        />
-      )}
+      {/* Panel de controles - Grid 2x2 */}
+      <View style={[styles.controlsGrid, { width: size }]}>
+        {/* Fila 1 */}
+        <View style={styles.controlsRow}>
+          {/* Tarjeta 1: Deshacer */}
+          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+            <Pressable
+              onPress={undoLastStroke}
+              style={[styles.buttonPressable, userStrokes.length === 0 && styles.buttonDisabled]}
+              disabled={userStrokes.length === 0}
+            >
+              <Undo2
+                size={28}
+                color={userStrokes.length > 0 ? COLORS.undo : "#D1D5DB"}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: userStrokes.length > 0 ? COLORS.undo : "#D1D5DB" },
+                ]}
+              >
+                戻す
+              </Text>
+            </Pressable>
+          </Surface>
+
+          {/* Tarjeta 2: Borrar todo */}
+          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+            <Pressable
+              onPress={resetAll}
+              style={[styles.buttonPressable, userStrokes.length === 0 && styles.buttonDisabled]}
+              disabled={userStrokes.length === 0}
+            >
+              <Trash2
+                size={28}
+                color={userStrokes.length > 0 ? COLORS.clear : "#D1D5DB"}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: userStrokes.length > 0 ? COLORS.clear : "#D1D5DB" },
+                ]}
+              >
+                消す
+              </Text>
+            </Pressable>
+          </Surface>
+        </View>
+
+        {/* Fila 2 */}
+        <View style={styles.controlsRow}>
+          {/* Tarjeta 3: Mostrar/Ocultar guía - Invertido */}
+          <Surface
+            style={[
+              styles.buttonCard,
+              { width: buttonCardSize },
+              !showGuide && { backgroundColor: COLORS.guide },
+            ]}
+            elevation={1}
+            mode="flat"
+          >
+            <Pressable onPress={toggleGuide} style={styles.buttonPressable}>
+              {showGuide ? (
+                <Eye size={28} color={COLORS.guide} strokeWidth={2.5} />
+              ) : (
+                <EyeOff size={28} color="#FFFFFF" strokeWidth={2.5} />
+              )}
+              <Text
+                style={[styles.buttonText, { color: showGuide ? COLORS.guide : "#FFFFFF" }]}
+              >
+                {showGuide ? "ガイド" : "非表示"}
+              </Text>
+            </Pressable>
+          </Surface>
+
+          {/* Tarjeta 4: Revisar */}
+          <Surface
+            style={[styles.buttonCard, { width: buttonCardSize }]}
+            elevation={1}
+            mode="flat"
+          >
+            <Pressable
+              onPress={validateDrawing}
+              style={styles.buttonPressable}
+            >
+              <ClipboardCheck
+                size={28}
+                color={COLORS.validate}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[styles.buttonText, { color: COLORS.validate }]}
+              >
+                採点
+              </Text>
+            </Pressable>
+          </Surface>
+        </View>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  successOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.95)",
+  container: {
+    alignItems: "center",
+    gap: 16,
+  },
+  writingCard: {
+    borderRadius: 32,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  canvasContainer: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 10,
+    padding: CARD_PADDING,
+  },
+  controlsGrid: {
+    gap: 12,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  buttonCard: {
+    height: 88,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  buttonPressable: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 15,
+    includeFontPadding: false,
+  },
+  successOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  scoreText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 56,
+    includeFontPadding: false,
+  },
+  scoreLabelText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 22,
+    includeFontPadding: false,
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  retryButtonText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(239, 68, 68, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  errorScoreText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 48,
+    color: "#FFFFFF",
+    includeFontPadding: false,
+  },
+  errorText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 22,
+    color: "#FFFFFF",
   },
 });

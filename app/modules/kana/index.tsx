@@ -1,6 +1,6 @@
 // app/modules/kana/index.tsx
-import React, { useState } from 'react';
-import { View, ScrollView, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, ScrollView, Dimensions, Animated, Pressable } from 'react-native';
 import { Text, Surface, TouchableRipple } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -8,9 +8,19 @@ import { StatusBar } from 'expo-status-bar';
 
 const { width } = Dimensions.get('window');
 
-// Color del módulo kana (N5)
+// Color base del módulo (N5)
 const THEME_COLOR = '#F5A238';
-const THEME_COLOR_LIGHT = '#FEF7ED';
+
+// Colores diferenciados para Hiragana y Katakana
+// Hiragana: tonos cálidos coral/rosa suave que armonizan con el naranja
+const HIRAGANA_CARD_BG = '#FFF5F5';
+const HIRAGANA_CARD_TEXT = '#C94C4C';
+const HIRAGANA_RIPPLE = '#E8787820';
+
+// Katakana: tonos azul/índigo suave que contrastan elegantemente
+const KATAKANA_CARD_BG = '#F0F4FF';
+const KATAKANA_CARD_TEXT = '#5B6DAF';
+const KATAKANA_RIPPLE = '#5B6DAF20';
 
 type KanaChar = { char: string; romaji: string };
 type KanaGroup = { title: string; data: KanaChar[] };
@@ -135,7 +145,25 @@ export default function KanaScreen() {
   const [mode, setMode] = useState<'hiragana' | 'katakana'>('hiragana');
   const router = useRouter();
   
+  // Animación del selector
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const selectorWidth = (width - PADDING * 2 - 8) / 2; // Ancho de cada mitad (restando padding del contenedor)
+  
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: mode === 'hiragana' ? 0 : selectorWidth,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 12,
+    }).start();
+  }, [mode]);
+  
   const activeData = mode === 'hiragana' ? HIRAGANA_DATA : KATAKANA_DATA;
+  
+  // Colores dinámicos según el modo
+  const cardBg = mode === 'hiragana' ? HIRAGANA_CARD_BG : KATAKANA_CARD_BG;
+  const cardText = mode === 'hiragana' ? HIRAGANA_CARD_TEXT : KATAKANA_CARD_TEXT;
+  const cardRipple = mode === 'hiragana' ? HIRAGANA_RIPPLE : KATAKANA_RIPPLE;
 
   const handleCharPress = (char: string) => {
     if (char) {
@@ -148,65 +176,84 @@ export default function KanaScreen() {
       <StatusBar style="dark" />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Selector Hiragana/Katakana */}
-      <View style={{ paddingHorizontal: PADDING, paddingTop: 12, marginBottom: 16 }}>
+      {/* Selector Hiragana/Katakana - Con animación */}
+      <View style={{ paddingHorizontal: PADDING, paddingTop: 10, marginBottom: 10 }}>
         <View
           style={{
             flexDirection: 'row',
             backgroundColor: '#F3F4F6',
-            borderRadius: 12,
-            padding: 3,
+            borderRadius: 10,
+            padding: 4,
+            position: 'relative',
           }}
         >
-          <TouchableRipple
+          {/* Selector animado (fondo blanco que se desliza) */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 4,
+              width: '50%',
+              backgroundColor: '#FFFFFF',
+              borderRadius: 8,
+              transform: [{ translateX: slideAnim }],
+              // Sombra sutil para el selector
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 2,
+            }}
+          />
+
+          {/* Botón Hiragana */}
+          <Pressable
             onPress={() => setMode('hiragana')}
-            borderless
-            style={{ flex: 1, borderRadius: 9 }}
+            style={{ flex: 1, zIndex: 1 }}
           >
             <View
               style={{
-                backgroundColor: mode === 'hiragana' ? '#FFFFFF' : 'transparent',
                 paddingVertical: 8,
                 alignItems: 'center',
-                borderRadius: 9,
+                borderRadius: 8,
               }}
             >
               <Text
                 style={{
-                  fontFamily: 'NotoSansJP_400Regular',
-                  fontSize: 15,
-                  color: mode === 'hiragana' ? THEME_COLOR : '#6B7280',
+                  fontFamily: 'NotoSansJP_700Bold',
+                  fontSize: 18,
+                  color: mode === 'hiragana' ? HIRAGANA_CARD_TEXT : '#9CA3AF',
                 }}
               >
                 ひらがな
               </Text>
             </View>
-          </TouchableRipple>
+          </Pressable>
 
-          <TouchableRipple
+          {/* Botón Katakana */}
+          <Pressable
             onPress={() => setMode('katakana')}
-            borderless
-            style={{ flex: 1, borderRadius: 9 }}
+            style={{ flex: 1, zIndex: 1 }}
           >
             <View
               style={{
-                backgroundColor: mode === 'katakana' ? '#FFFFFF' : 'transparent',
                 paddingVertical: 8,
                 alignItems: 'center',
-                borderRadius: 9,
+                borderRadius: 8,
               }}
             >
               <Text
                 style={{
-                  fontFamily: 'NotoSansJP_400Regular',
-                  fontSize: 15,
-                  color: mode === 'katakana' ? THEME_COLOR : '#6B7280',
+                  fontFamily: 'NotoSansJP_700Bold',
+                  fontSize: 18,
+                  color: mode === 'katakana' ? KATAKANA_CARD_TEXT : '#9CA3AF',
                 }}
               >
                 カタカナ
               </Text>
             </View>
-          </TouchableRipple>
+          </Pressable>
         </View>
       </View>
 
@@ -235,6 +282,9 @@ export default function KanaScreen() {
                 <KanaCard
                   key={index}
                   kana={kana}
+                  cardBg={cardBg}
+                  cardText={cardText}
+                  cardRipple={cardRipple}
                   onPress={() => handleCharPress(kana.char)}
                 />
               ))}
@@ -248,10 +298,13 @@ export default function KanaScreen() {
 
 type KanaCardProps = {
   kana: KanaChar;
+  cardBg: string;
+  cardText: string;
+  cardRipple: string;
   onPress: () => void;
 };
 
-const KanaCard = ({ kana, onPress }: KanaCardProps) => {
+const KanaCard = ({ kana, cardBg, cardText, cardRipple, onPress }: KanaCardProps) => {
   if (!kana.char) return <View style={{ width: CARD_WIDTH }} />;
 
   return (
@@ -260,7 +313,7 @@ const KanaCard = ({ kana, onPress }: KanaCardProps) => {
         width: CARD_WIDTH,
         aspectRatio: 1,
         borderRadius: 20,
-        backgroundColor: THEME_COLOR_LIGHT,
+        backgroundColor: cardBg,
         overflow: 'hidden',
       }}
       elevation={0}
@@ -268,7 +321,7 @@ const KanaCard = ({ kana, onPress }: KanaCardProps) => {
     >
       <TouchableRipple
         onPress={onPress}
-        rippleColor={THEME_COLOR + '20'}
+        rippleColor={cardRipple}
         style={{ flex: 1 }}
       >
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -276,7 +329,7 @@ const KanaCard = ({ kana, onPress }: KanaCardProps) => {
             style={{
               fontFamily: 'NotoSansJP_400Regular',
               fontSize: 36,
-              color: '#1F2937',
+              color: cardText,
               includeFontPadding: false,
             }}
           >

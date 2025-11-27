@@ -1,29 +1,48 @@
-import React, { useState, useEffect } from "react";
-import { View, ScrollView, Dimensions, ActivityIndicator } from "react-native";
-import { Surface, Text, TouchableRipple } from "react-native-paper"; // IconButton eliminado
+// app/modules/kana/practice/[char].tsx
+import React, { useState, useEffect, useRef } from "react";
+import { View, ScrollView, Dimensions, ActivityIndicator, Animated, Pressable } from "react-native";
+import { Surface, Text } from "react-native-paper";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KanaAnimation } from "@/src/components/kana/KanaAnimation";
 import { KanaWriting } from "@/src/components/kana/KanaWriting";
 
-import KVG_INDEX from "../../../../assets/kvg-index.json";
-import kana03042 from "../../../../assets/kanjivg/03042.svg";
+// Servicio de carga de trazos
+import { loadStrokesWithMetadata } from "@/src/services/strokeLoader";
 
-const SVG_FILES: Record<string, string> = {
-  "03042.svg": kana03042,
-};
+// Registro de SVGs (importar todos los SVGs necesarios)
+import SVG_REGISTRY from "@/src/data/svgRegistry";
 
 const { width } = Dimensions.get("window");
-const CARD_SIZE = width - 48; 
+const CARD_SIZE = width - 48;
+const PADDING = 20;
+
+// Colores del selector (consistentes con el tema)
+const OBSERVE_COLOR = '#F5A238';  // Naranja del tema N5
+const WRITE_COLOR = '#22c55e';     // Verde para escribir
 
 export default function KanaPracticeScreen() {
   const { char } = useLocalSearchParams();
   const character = Array.isArray(char) ? char[0] : char || "あ";
 
   const [strokes, setStrokes] = useState<string[]>([]);
+  const [strokeWidth, setStrokeWidth] = useState<number>(6);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'observe' | 'write'>('observe');
+
+  // Animación del selector
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const selectorWidth = (width - PADDING * 2 - 8) / 2;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: mode === 'observe' ? 0 : selectorWidth,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 12,
+    }).start();
+  }, [mode]);
 
   useEffect(() => {
     loadData();
@@ -32,119 +51,137 @@ export default function KanaPracticeScreen() {
   const loadData = () => {
     setLoading(true);
     try {
-      const fileEntry = (KVG_INDEX as any)[character];
-      if (!fileEntry || fileEntry.length === 0) {
-        setStrokes([]);
-        return;
-      }
-      
-      const filename = fileEntry[0];
-      const svgContent = SVG_FILES[filename];
-
-      if (svgContent) {
-        const paths = extractPathsFromSvg(svgContent);
-        setStrokes(paths);
-      }
+      // Usar el servicio de carga de trazos con metadata
+      const result = loadStrokesWithMetadata(character, SVG_REGISTRY);
+      setStrokes(result.strokes);
+      setStrokeWidth(result.strokeWidth);
     } finally {
       setLoading(false);
     }
   };
 
-  const extractPathsFromSvg = (svg: string) => {
-    const paths: string[] = [];
-    const regex = /<path[^>]*\sd="([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(svg)) !== null) {
-      paths.push(match[1]);
-    }
-    return paths;
-  };
-
-  const padding = 20; 
+  // Color activo según el modo
+  const activeColor = mode === 'observe' ? OBSERVE_COLOR : WRITE_COLOR;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#FAFAF9" }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Espaciador superior para igualar la posición con index.tsx (flecha eliminada) */}
-      <View style={{ height: 24 }} />
+      {/* Selector de modo - Mismo estilo que index.tsx */}
+      <View style={{ paddingHorizontal: PADDING, paddingTop: 10, marginBottom: 10 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: '#F3F4F6',
+            borderRadius: 10,
+            padding: 4,
+            position: 'relative',
+          }}
+        >
+          {/* Selector animado (fondo blanco que se desliza) */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 4,
+              width: '50%',
+              backgroundColor: '#FFFFFF',
+              borderRadius: 8,
+              transform: [{ translateX: slideAnim }],
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 2,
+            }}
+          />
 
-      {/* SELECTOR DE MODO */}
-      <View style={{ paddingHorizontal: padding, marginBottom: 16 }}>
-        <Surface style={{ 
-          flexDirection: 'row', 
-          backgroundColor: '#e5e5e5', 
-          borderRadius: 16, 
-          padding: 3,
-          overflow: 'hidden'
-        }} elevation={0} mode="flat">
-          
-          {/* Observar Toggle */}
-          <TouchableRipple 
-            onPress={() => setMode('observe')} 
-            style={{ flex: 1, borderRadius: 14, overflow: 'hidden' }}
+          {/* Botón Observar */}
+          <Pressable
+            onPress={() => setMode('observe')}
+            style={{ flex: 1, zIndex: 1 }}
           >
-            <View style={{ 
-              backgroundColor: mode === 'observe' ? 'white' : 'transparent',
-              paddingVertical: 4,
-              alignItems: 'center',
-              borderRadius: 14,
-              elevation: mode === 'observe' ? 1 : 0
-            }}>
-              <Text style={{ 
-                fontFamily: 'NotoSansJP_400Regular', // CAMBIO: Regular
-                color: mode === 'observe' ? '#B91C1C' : '#78716c',
-                fontSize: 15
-              }}>
-                観察
+            <View
+              style={{
+                paddingVertical: 8,
+                alignItems: 'center',
+                borderRadius: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: 'NotoSansJP_700Bold',
+                  fontSize: 18,
+                  color: mode === 'observe' ? OBSERVE_COLOR : '#9CA3AF',
+                }}
+              >
+                観る
               </Text>
             </View>
-          </TouchableRipple>
+          </Pressable>
 
-          {/* Escribir Toggle */}
-          <TouchableRipple 
-            onPress={() => setMode('write')} 
-            style={{ flex: 1, borderRadius: 14, overflow: 'hidden' }}
+          {/* Botón Escribir */}
+          <Pressable
+            onPress={() => setMode('write')}
+            style={{ flex: 1, zIndex: 1 }}
           >
-            <View style={{ 
-              backgroundColor: mode === 'write' ? 'white' : 'transparent',
-              paddingVertical: 4,
-              alignItems: 'center',
-              borderRadius: 14,
-              elevation: mode === 'write' ? 1 : 0
-            }}>
-              <Text style={{ 
-                fontFamily: 'NotoSansJP_400Regular', // CAMBIO: Regular
-                color: mode === 'write' ? '#7C3AED' : '#78716c',
-                fontSize: 15
-              }}>
+            <View
+              style={{
+                paddingVertical: 8,
+                alignItems: 'center',
+                borderRadius: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: 'NotoSansJP_700Bold',
+                  fontSize: 18,
+                  color: mode === 'write' ? WRITE_COLOR : '#9CA3AF',
+                }}
+              >
                 書く
               </Text>
             </View>
-          </TouchableRipple>
-
-        </Surface>
+          </Pressable>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: padding, paddingBottom: 40 }}>
-        {/* Contenido Principal */}
-        <View style={{ alignItems: 'center' }}>
-          {loading ? (
-            <ActivityIndicator size="large" color="#B91C1C" style={{ marginTop: 40 }} />
-          ) : (
-            <View>
-              {mode === "observe" ? (
-                <KanaAnimation strokes={strokes} size={CARD_SIZE} />
-              ) : (
-                <KanaWriting 
-                  strokes={strokes} 
-                  size={CARD_SIZE} 
-                  onComplete={() => console.log("Escritura completa")} 
-                />
-              )}
-            </View>
-          )}
-        </View>
+      {/* Contenido */}
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: "center",
+          paddingVertical: 20,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" color={activeColor} />
+          </View>
+        ) : strokes.length === 0 ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 40 }}>
+            <Text
+              style={{
+                fontFamily: 'NotoSansJP_400Regular',
+                fontSize: 16,
+                color: '#6B7280',
+                textAlign: 'center',
+              }}
+            >
+              No hay datos de trazos disponibles para este carácter.
+            </Text>
+          </View>
+        ) : (
+          <>
+            {mode === 'observe' ? (
+              <KanaAnimation strokes={strokes} size={CARD_SIZE} strokeWidth={strokeWidth} />
+            ) : (
+              <KanaWriting strokes={strokes} size={CARD_SIZE} strokeWidth={strokeWidth} />
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

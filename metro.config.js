@@ -1,18 +1,14 @@
-const { getDefaultConfig } = require("expo/metro-config");
-const { withNativeWind } = require("nativewind/metro");
+// metro.config.js
+const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
-const { transformer, resolver } = config;
 
-config.transformer = {
-  ...transformer,
-  babelTransformerPath: require.resolve("./metro.transformer.js"),
-};
+// Tratar SVG como código fuente (no como asset binario)
+// Esto permite importarlos y procesarlos con nuestro transformador
+config.resolver.assetExts = config.resolver.assetExts.filter(ext => ext !== 'svg');
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'svg'];
 
-config.resolver = {
-  ...resolver,
-  assetExts: resolver.assetExts.filter((ext) => ext !== "svg"),
-  sourceExts: [...resolver.sourceExts, "svg"],
-};
+// Usar nuestro transformador personalizado que convierte SVG a string
+config.transformer.babelTransformerPath = require.resolve('./svg-transformer.js');
 
-module.exports = withNativeWind(config, { input: "./global.css" });
+module.exports = config;
