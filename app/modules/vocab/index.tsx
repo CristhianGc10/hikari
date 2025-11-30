@@ -1,35 +1,63 @@
 // app/modules/vocab/index.tsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, ScrollView, Dimensions, Animated, Pressable, FlatList } from 'react-native';
-import { Text, Surface, TouchableRipple, Searchbar } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { BookOpen, Users, Utensils, Shirt, Home, Car, Wrench, Calendar, MapPin, Building2, Heart, Leaf, Sparkles, Briefcase, Hash, Search, X } from 'lucide-react-native';
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  ScrollView,
+  Dimensions,
+  Animated,
+  Pressable,
+  TextInput,
+} from "react-native";
+import { Text, Surface, TouchableRipple } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Stack, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import {
+  BookOpen,
+  Users,
+  Utensils,
+  Shirt,
+  Home,
+  Car,
+  Wrench,
+  Calendar,
+  MapPin,
+  Building2,
+  Heart,
+  Leaf,
+  Sparkles,
+  Briefcase,
+  Hash,
+  Search,
+  X,
+} from "lucide-react-native";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 // Color base del módulo (N5)
-const THEME_COLOR = '#F5A238';
-const THEME_LIGHT = '#FEF7ED';
+const THEME_COLOR = "#F5A238";
+const THEME_LIGHT = "#FEF7ED";
 
 // Colores por categoría - Paleta vibrante y armónica
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; icon: string }> = {
-  people: { bg: '#FFF0F5', text: '#DB2777', icon: '#EC4899' },
-  food: { bg: '#FEF3E2', text: '#EA580C', icon: '#F97316' },
-  clothes: { bg: '#F0F9FF', text: '#0369A1', icon: '#0EA5E9' },
-  house: { bg: '#F5F3FF', text: '#7C3AED', icon: '#8B5CF6' },
-  vehicle: { bg: '#ECFDF5', text: '#059669', icon: '#10B981' },
-  tools: { bg: '#FEF9C3', text: '#CA8A04', icon: '#EAB308' },
-  date: { bg: '#FCE7F3', text: '#BE185D', icon: '#EC4899' },
-  time: { bg: '#E0E7FF', text: '#4338CA', icon: '#6366F1' },
-  location: { bg: '#CCFBF1', text: '#0D9488', icon: '#14B8A6' },
-  facility: { bg: '#FEE2E2', text: '#DC2626', icon: '#EF4444' },
-  body: { bg: '#FFE4E6', text: '#E11D48', icon: '#F43F5E' },
-  nature: { bg: '#D1FAE5', text: '#047857', icon: '#10B981' },
-  condition: { bg: '#E0F2FE', text: '#0284C7', icon: '#0EA5E9' },
-  work: { bg: '#F3E8FF', text: '#9333EA', icon: '#A855F7' },
-  numbers: { bg: '#FDF4FF', text: '#A21CAF', icon: '#D946EF' },
+const CATEGORY_COLORS: Record<
+  string,
+  { bg: string; text: string; icon: string }
+> = {
+  people: { bg: "#FFF0F5", text: "#DB2777", icon: "#EC4899" },
+  food: { bg: "#FEF3E2", text: "#EA580C", icon: "#F97316" },
+  clothes: { bg: "#F0F9FF", text: "#0369A1", icon: "#0EA5E9" },
+  house: { bg: "#F5F3FF", text: "#7C3AED", icon: "#8B5CF6" },
+  vehicle: { bg: "#ECFDF5", text: "#059669", icon: "#10B981" },
+  tools: { bg: "#FEF9C3", text: "#CA8A04", icon: "#EAB308" },
+  date: { bg: "#FCE7F3", text: "#BE185D", icon: "#EC4899" },
+  time: { bg: "#E0E7FF", text: "#4338CA", icon: "#6366F1" },
+  location: { bg: "#CCFBF1", text: "#0D9488", icon: "#14B8A6" },
+  facility: { bg: "#FEE2E2", text: "#DC2626", icon: "#EF4444" },
+  body: { bg: "#FFE4E6", text: "#E11D48", icon: "#F43F5E" },
+  nature: { bg: "#D1FAE5", text: "#047857", icon: "#10B981" },
+  condition: { bg: "#E0F2FE", text: "#0284C7", icon: "#0EA5E9" },
+  work: { bg: "#F3E8FF", text: "#9333EA", icon: "#A855F7" },
+  numbers: { bg: "#FDF4FF", text: "#A21CAF", icon: "#D946EF" },
 };
 
 // Iconos por categoría
@@ -51,15 +79,6 @@ const CATEGORY_ICONS: Record<string, any> = {
   numbers: Hash,
 };
 
-type VocabWord = {
-  id: string;
-  japanese: string;
-  reading: string;
-  meaning: string;
-  example?: string;
-  exampleMeaning?: string;
-};
-
 type VocabCategory = {
   id: string;
   titleJp: string;
@@ -71,21 +90,126 @@ type VocabCategory = {
 
 // Categorías del vocabulario N5
 const CATEGORIES: VocabCategory[] = [
-  { id: 'people', titleJp: '人', titleEs: 'Personas', icon: 'people', wordCount: 43, progress: 0 },
-  { id: 'food', titleJp: '食べ物', titleEs: 'Comida', icon: 'food', wordCount: 41, progress: 0 },
-  { id: 'clothes', titleJp: '服', titleEs: 'Ropa', icon: 'clothes', wordCount: 16, progress: 0 },
-  { id: 'house', titleJp: '家', titleEs: 'Casa', icon: 'house', wordCount: 17, progress: 0 },
-  { id: 'vehicle', titleJp: '乗り物', titleEs: 'Transporte', icon: 'vehicle', wordCount: 11, progress: 0 },
-  { id: 'tools', titleJp: '道具', titleEs: 'Herramientas', icon: 'tools', wordCount: 22, progress: 0 },
-  { id: 'date', titleJp: '日付', titleEs: 'Fechas', icon: 'date', wordCount: 30, progress: 0 },
-  { id: 'time', titleJp: '時間', titleEs: 'Tiempo', icon: 'time', wordCount: 29, progress: 0 },
-  { id: 'location', titleJp: '位置', titleEs: 'Ubicación', icon: 'location', wordCount: 20, progress: 0 },
-  { id: 'facility', titleJp: '施設', titleEs: 'Lugares', icon: 'facility', wordCount: 31, progress: 0 },
-  { id: 'body', titleJp: '体', titleEs: 'Cuerpo', icon: 'body', wordCount: 17, progress: 0 },
-  { id: 'nature', titleJp: '自然', titleEs: 'Naturaleza', icon: 'nature', wordCount: 18, progress: 0 },
-  { id: 'condition', titleJp: '状態', titleEs: 'Estados', icon: 'condition', wordCount: 22, progress: 0 },
-  { id: 'work', titleJp: '仕事', titleEs: 'Trabajo y Estudio', icon: 'work', wordCount: 38, progress: 0 },
-  { id: 'numbers', titleJp: '数字', titleEs: 'Números', icon: 'numbers', wordCount: 80, progress: 0 },
+  {
+    id: "people",
+    titleJp: "人",
+    titleEs: "Personas",
+    icon: "people",
+    wordCount: 43,
+    progress: 0,
+  },
+  {
+    id: "food",
+    titleJp: "食べ物",
+    titleEs: "Comida",
+    icon: "food",
+    wordCount: 41,
+    progress: 0,
+  },
+  {
+    id: "clothes",
+    titleJp: "服",
+    titleEs: "Ropa",
+    icon: "clothes",
+    wordCount: 16,
+    progress: 0,
+  },
+  {
+    id: "house",
+    titleJp: "家",
+    titleEs: "Casa",
+    icon: "house",
+    wordCount: 17,
+    progress: 0,
+  },
+  {
+    id: "vehicle",
+    titleJp: "乗り物",
+    titleEs: "Transporte",
+    icon: "vehicle",
+    wordCount: 11,
+    progress: 0,
+  },
+  {
+    id: "tools",
+    titleJp: "道具",
+    titleEs: "Herramientas",
+    icon: "tools",
+    wordCount: 22,
+    progress: 0,
+  },
+  {
+    id: "date",
+    titleJp: "日付",
+    titleEs: "Fechas",
+    icon: "date",
+    wordCount: 30,
+    progress: 0,
+  },
+  {
+    id: "time",
+    titleJp: "時間",
+    titleEs: "Tiempo",
+    icon: "time",
+    wordCount: 29,
+    progress: 0,
+  },
+  {
+    id: "location",
+    titleJp: "位置",
+    titleEs: "Ubicación",
+    icon: "location",
+    wordCount: 20,
+    progress: 0,
+  },
+  {
+    id: "facility",
+    titleJp: "施設",
+    titleEs: "Lugares",
+    icon: "facility",
+    wordCount: 31,
+    progress: 0,
+  },
+  {
+    id: "body",
+    titleJp: "体",
+    titleEs: "Cuerpo",
+    icon: "body",
+    wordCount: 17,
+    progress: 0,
+  },
+  {
+    id: "nature",
+    titleJp: "自然",
+    titleEs: "Naturaleza",
+    icon: "nature",
+    wordCount: 18,
+    progress: 0,
+  },
+  {
+    id: "condition",
+    titleJp: "状態",
+    titleEs: "Estados",
+    icon: "condition",
+    wordCount: 22,
+    progress: 0,
+  },
+  {
+    id: "work",
+    titleJp: "仕事",
+    titleEs: "Trabajo y Estudio",
+    icon: "work",
+    wordCount: 38,
+    progress: 0,
+  },
+  {
+    id: "numbers",
+    titleJp: "数字",
+    titleEs: "Números",
+    icon: "numbers",
+    wordCount: 80,
+    progress: 0,
+  },
 ];
 
 // Grid config
@@ -95,22 +219,22 @@ const NUM_COLUMNS = 2;
 const CARD_WIDTH = (width - PADDING * 2 - GAP) / NUM_COLUMNS;
 
 // Componente de tarjeta de categoría
-const CategoryCard = ({ 
-  category, 
-  onPress 
-}: { 
-  category: VocabCategory; 
+const CategoryCard = ({
+  category,
+  onPress,
+}: {
+  category: VocabCategory;
   onPress: () => void;
 }) => {
   const colors = CATEGORY_COLORS[category.id] || CATEGORY_COLORS.people;
   const IconComponent = CATEGORY_ICONS[category.icon] || BookOpen;
-  
+
   return (
     <Surface
       style={{
         width: CARD_WIDTH,
         borderRadius: 16,
-        overflow: 'hidden',
+        overflow: "hidden",
         backgroundColor: colors.bg,
       }}
       elevation={0}
@@ -122,15 +246,21 @@ const CategoryCard = ({
       >
         <View>
           {/* Icono y título japonés */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
             <View
               style={{
                 width: 36,
                 height: 36,
                 borderRadius: 10,
                 backgroundColor: `${colors.icon}20`,
-                justifyContent: 'center',
-                alignItems: 'center',
+                justifyContent: "center",
+                alignItems: "center",
                 marginRight: 10,
               }}
             >
@@ -138,7 +268,7 @@ const CategoryCard = ({
             </View>
             <Text
               style={{
-                fontFamily: 'NotoSansJP_700Bold',
+                fontFamily: "NotoSansJP_700Bold",
                 fontSize: 20,
                 color: colors.text,
               }}
@@ -150,7 +280,7 @@ const CategoryCard = ({
           {/* Título en español */}
           <Text
             style={{
-              fontFamily: 'NotoSansJP_400Regular',
+              fontFamily: "NotoSansJP_400Regular",
               fontSize: 14,
               color: colors.text,
               opacity: 0.8,
@@ -161,10 +291,16 @@ const CategoryCard = ({
           </Text>
 
           {/* Contador de palabras */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <Text
               style={{
-                fontFamily: 'NotoSansJP_400Regular',
+                fontFamily: "NotoSansJP_400Regular",
                 fontSize: 12,
                 color: colors.text,
                 opacity: 0.6,
@@ -172,7 +308,7 @@ const CategoryCard = ({
             >
               {category.wordCount} palabras
             </Text>
-            
+
             {/* Barra de progreso mini */}
             <View
               style={{
@@ -180,13 +316,13 @@ const CategoryCard = ({
                 height: 4,
                 backgroundColor: `${colors.icon}30`,
                 borderRadius: 2,
-                overflow: 'hidden',
+                overflow: "hidden",
               }}
             >
               <View
                 style={{
                   width: `${category.progress * 100}%`,
-                  height: '100%',
+                  height: "100%",
                   backgroundColor: colors.icon,
                   borderRadius: 2,
                 }}
@@ -200,9 +336,15 @@ const CategoryCard = ({
 };
 
 // Header con estadísticas
-const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learnedWords: number }) => {
+const StatsHeader = ({
+  totalWords,
+  learnedWords,
+}: {
+  totalWords: number;
+  learnedWords: number;
+}) => {
   const progress = totalWords > 0 ? learnedWords / totalWords : 0;
-  
+
   return (
     <Surface
       style={{
@@ -214,17 +356,23 @@ const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learned
       }}
       elevation={0}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         {/* Icono y título */}
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           <View
             style={{
               width: 48,
               height: 48,
               borderRadius: 14,
               backgroundColor: THEME_COLOR,
-              justifyContent: 'center',
-              alignItems: 'center',
+              justifyContent: "center",
+              alignItems: "center",
               marginRight: 12,
             }}
           >
@@ -233,18 +381,18 @@ const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learned
           <View>
             <Text
               style={{
-                fontFamily: 'NotoSansJP_700Bold',
+                fontFamily: "NotoSansJP_700Bold",
                 fontSize: 18,
-                color: '#1F2937',
+                color: "#1F2937",
               }}
             >
               語彙 N5
             </Text>
             <Text
               style={{
-                fontFamily: 'NotoSansJP_400Regular',
+                fontFamily: "NotoSansJP_400Regular",
                 fontSize: 13,
-                color: '#6B7280',
+                color: "#6B7280",
               }}
             >
               {learnedWords} / {totalWords} palabras
@@ -253,10 +401,10 @@ const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learned
         </View>
 
         {/* Progreso circular */}
-        <View style={{ alignItems: 'center' }}>
+        <View style={{ alignItems: "center" }}>
           <Text
             style={{
-              fontFamily: 'NotoSansJP_700Bold',
+              fontFamily: "NotoSansJP_700Bold",
               fontSize: 24,
               color: THEME_COLOR,
             }}
@@ -271,15 +419,15 @@ const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learned
         style={{
           marginTop: 12,
           height: 8,
-          backgroundColor: '#E5E7EB',
+          backgroundColor: "#E5E7EB",
           borderRadius: 4,
-          overflow: 'hidden',
+          overflow: "hidden",
         }}
       >
         <View
           style={{
             width: `${progress * 100}%`,
-            height: '100%',
+            height: "100%",
             backgroundColor: THEME_COLOR,
             borderRadius: 4,
           }}
@@ -291,19 +439,25 @@ const StatsHeader = ({ totalWords, learnedWords }: { totalWords: number; learned
 
 export default function VocabScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
-  
+  const inputRef = useRef<TextInput>(null);
+
   // Animación para la barra de búsqueda
   const searchAnim = useRef(new Animated.Value(0)).current;
-  
+
   useEffect(() => {
     Animated.spring(searchAnim, {
       toValue: isSearchActive ? 1 : 0,
       useNativeDriver: false,
-      tension: 100,
-      friction: 12,
-    }).start();
+      tension: 65,
+      friction: 11,
+    }).start(() => {
+      // Focus en el input cuando la animación termina de abrir
+      if (isSearchActive && inputRef.current) {
+        inputRef.current.focus();
+      }
+    });
   }, [isSearchActive]);
 
   const handleCategoryPress = (categoryId: string) => {
@@ -312,7 +466,18 @@ export default function VocabScreen() {
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      router.push(`/modules/vocab/search?q=${encodeURIComponent(searchQuery)}` as any);
+      router.push(
+        `/modules/vocab/search?q=${encodeURIComponent(searchQuery)}` as any
+      );
+    }
+  };
+
+  const handleToggleSearch = () => {
+    if (isSearchActive) {
+      setSearchQuery("");
+      setIsSearchActive(false);
+    } else {
+      setIsSearchActive(true);
     }
   };
 
@@ -323,92 +488,141 @@ export default function VocabScreen() {
   // Filtrar categorías si hay búsqueda
   const filteredCategories = searchQuery.trim()
     ? CATEGORIES.filter(
-        cat =>
+        (cat) =>
           cat.titleJp.includes(searchQuery) ||
           cat.titleEs.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : CATEGORIES;
 
+  // Interpolaciones de animación
+  const searchWidth = searchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [44, width - PADDING * 2],
+  });
+
+  const titleOpacity = searchAnim.interpolate({
+    inputRange: [0, 0.3],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
+
+  const titleTranslateX = searchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -100],
+  });
+
+  const inputOpacity = searchAnim.interpolate({
+    inputRange: [0.5, 1],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+
+  const iconRotate = searchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "90deg"],
+  });
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
+      edges={["top"]}
+    >
       <StatusBar style="dark" />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header con título */}
-      <View style={{ paddingHorizontal: PADDING, paddingTop: 10, paddingBottom: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {/* Header con título y búsqueda animada */}
+      <View
+        style={{ paddingHorizontal: PADDING, paddingTop: 10, paddingBottom: 8 }}
+      >
+        <View
+          style={{ flexDirection: "row", alignItems: "center", height: 44 }}
+        >
+          {/* Título - se oculta cuando la búsqueda está activa */}
+          <Animated.View
+            style={{
+              opacity: titleOpacity,
+              transform: [{ translateX: titleTranslateX }],
+              position: "absolute",
+              left: 0,
+            }}
+          >
             <Text
               style={{
-                fontFamily: 'NotoSansJP_700Bold',
+                fontFamily: "NotoSansJP_700Bold",
                 fontSize: 24,
                 color: THEME_COLOR,
               }}
             >
               語彙
             </Text>
-            <Text
-              style={{
-                fontFamily: 'NotoSansJP_400Regular',
-                fontSize: 16,
-                color: '#6B7280',
-                marginLeft: 8,
-              }}
-            >
-              Vocabulario
-            </Text>
-          </View>
-          
-          {/* Botón de búsqueda */}
-          <Pressable
-            onPress={() => setIsSearchActive(!isSearchActive)}
+          </Animated.View>
+
+          {/* Espaciador flexible */}
+          <View style={{ flex: 1 }} />
+
+          {/* Contenedor de búsqueda animado */}
+          <Animated.View
             style={{
-              width: 40,
-              height: 40,
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: isSearchActive ? "#F3F4F6" : THEME_LIGHT,
               borderRadius: 12,
-              backgroundColor: isSearchActive ? THEME_COLOR : THEME_LIGHT,
-              justifyContent: 'center',
-              alignItems: 'center',
+              height: 44,
+              width: searchWidth,
+              overflow: "hidden",
             }}
           >
-            {isSearchActive ? (
-              <X size={20} color="#FFFFFF" strokeWidth={2} />
-            ) : (
-              <Search size={20} color={THEME_COLOR} strokeWidth={2} />
-            )}
-          </Pressable>
+            {/* Botón de lupa / cerrar */}
+            <Pressable
+              onPress={handleToggleSearch}
+              style={{
+                width: 44,
+                height: 44,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Animated.View
+                style={{
+                  transform: [{ rotate: iconRotate }],
+                }}
+              >
+                {isSearchActive ? (
+                  <X size={20} color={THEME_COLOR} strokeWidth={2.5} />
+                ) : (
+                  <Search size={20} color={THEME_COLOR} strokeWidth={2.5} />
+                )}
+              </Animated.View>
+            </Pressable>
+
+            {/* Campo de texto */}
+            <Animated.View
+              style={{
+                flex: 1,
+                opacity: inputOpacity,
+                marginRight: 12,
+              }}
+            >
+              <TextInput
+                ref={inputRef}
+                placeholder="単語を検索..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
+                style={{
+                  fontFamily: "NotoSansJP_400Regular",
+                  fontSize: 15,
+                  color: "#1F2937",
+                  height: 44,
+                  paddingVertical: 0,
+                }}
+              />
+            </Animated.View>
+          </Animated.View>
         </View>
       </View>
-
-      {/* Barra de búsqueda animada */}
-      <Animated.View
-        style={{
-          height: searchAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 56],
-          }),
-          opacity: searchAnim,
-          overflow: 'hidden',
-          paddingHorizontal: PADDING,
-        }}
-      >
-        <Searchbar
-          placeholder="Buscar palabra..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          onSubmitEditing={handleSearch}
-          style={{
-            backgroundColor: '#F3F4F6',
-            borderRadius: 12,
-            elevation: 0,
-          }}
-          inputStyle={{
-            fontFamily: 'NotoSansJP_400Regular',
-            fontSize: 14,
-          }}
-          iconColor="#9CA3AF"
-        />
-      </Animated.View>
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -423,35 +637,25 @@ export default function VocabScreen() {
         <View style={{ paddingHorizontal: PADDING, marginBottom: 12 }}>
           <Text
             style={{
-              fontFamily: 'NotoSansJP_700Bold',
+              fontFamily: "NotoSansJP_700Bold",
               fontSize: 16,
-              color: '#374151',
+              color: "#374151",
             }}
           >
-            Categorías
-          </Text>
-          <Text
-            style={{
-              fontFamily: 'NotoSansJP_400Regular',
-              fontSize: 13,
-              color: '#9CA3AF',
-              marginTop: 2,
-            }}
-          >
-            {CATEGORIES.length} categorías · {totalWords} palabras en total
+            カテゴリー
           </Text>
         </View>
 
         {/* Grid de categorías */}
         <View
           style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
+            flexDirection: "row",
+            flexWrap: "wrap",
             paddingHorizontal: PADDING,
             gap: GAP,
           }}
         >
-          {filteredCategories.map(category => (
+          {filteredCategories.map((category) => (
             <CategoryCard
               key={category.id}
               category={category}
@@ -462,16 +666,16 @@ export default function VocabScreen() {
 
         {/* Mensaje si no hay resultados */}
         {filteredCategories.length === 0 && searchQuery.trim() && (
-          <View style={{ padding: PADDING, alignItems: 'center' }}>
+          <View style={{ padding: PADDING, alignItems: "center" }}>
             <Text
               style={{
-                fontFamily: 'NotoSansJP_400Regular',
+                fontFamily: "NotoSansJP_400Regular",
                 fontSize: 14,
-                color: '#9CA3AF',
-                textAlign: 'center',
+                color: "#9CA3AF",
+                textAlign: "center",
               }}
             >
-              No se encontraron categorías para "{searchQuery}"
+              「{searchQuery}」の結果はありません
             </Text>
           </View>
         )}

@@ -42,3 +42,4 @@ yarn-error.*
 
 # Ignorar SVGs de KanjiVG
 assets/kanjivg/
+assets/audio/

@@ -1,5 +1,11 @@
 // src/components/kana/KanaAnimation.tsx
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { View, Pressable, StyleSheet } from "react-native";
 import { Surface, Text } from "react-native-paper";
 import Svg, { Path, G } from "react-native-svg";
@@ -11,7 +17,13 @@ import Animated, {
   cancelAnimation,
 } from "react-native-reanimated";
 import { svgPathProperties } from "svg-path-properties";
-import { RotateCcw, Gauge, StepForward, Palette } from "lucide-react-native";
+import {
+  RotateCcw,
+  Gauge,
+  StepForward,
+  Palette,
+  Volume2,
+} from "lucide-react-native";
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -26,6 +38,7 @@ const COLORS = {
   speed: "#3B82F6",
   stepByStep: "#10B981",
   palette: "#8B5CF6",
+  audio: "#EC4899",
 };
 
 // Colores para cada trazo
@@ -53,10 +66,20 @@ const SPEEDS = [
 type KanaAnimationProps = {
   strokes: string[];
   size: number;
-  strokeWidth?: number; // Grosor de trazo opcional (para caracteres combinados)
+  strokeWidth?: number;
+  onPlayAudio?: () => void;
+  hasAudio?: boolean;
+  isPlayingAudio?: boolean;
 };
 
-export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH }: KanaAnimationProps) => {
+export const KanaAnimation = ({
+  strokes,
+  size,
+  strokeWidth = DEFAULT_STROKE_WIDTH,
+  onPlayAudio,
+  hasAudio = false,
+  isPlayingAudio = false,
+}: KanaAnimationProps) => {
   // Estados
   const [animationKey, setAnimationKey] = useState(0);
   const [speedIndex, setSpeedIndex] = useState(1);
@@ -70,11 +93,11 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
   // Handlers
   const onReplay = () => {
     setStepIndex(0);
-    setAnimationKey(prev => prev + 1);
+    setAnimationKey((prev) => prev + 1);
   };
 
   const onSpeedPress = () => {
-    setSpeedIndex(prev => (prev + 1) % SPEEDS.length);
+    setSpeedIndex((prev) => (prev + 1) % SPEEDS.length);
   };
 
   const onStepPress = () => {
@@ -82,11 +105,11 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
       // Activar modo paso a paso
       setIsStepMode(true);
       setStepIndex(0);
-      setAnimationKey(prev => prev + 1);
+      setAnimationKey((prev) => prev + 1);
     } else {
       // Avanzar al siguiente paso
       if (stepIndex < totalStrokes - 1) {
-        setStepIndex(prev => prev + 1);
+        setStepIndex((prev) => prev + 1);
       } else {
         // Último trazo completado: desactivar modo paso a paso
         setIsStepMode(false);
@@ -99,16 +122,18 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
     if (isStepMode) {
       setIsStepMode(false);
       setStepIndex(0);
-      setAnimationKey(prev => prev + 1);
+      setAnimationKey((prev) => prev + 1);
     }
   };
 
   const onColorPress = () => {
-    setIsColorMode(prev => !prev);
+    setIsColorMode((prev) => !prev);
   };
 
   const getStrokeColor = (index: number) => {
-    return isColorMode ? STROKE_COLORS[index % STROKE_COLORS.length] : STROKE_COLOR;
+    return isColorMode
+      ? STROKE_COLORS[index % STROKE_COLORS.length]
+      : STROKE_COLOR;
   };
 
   if (!strokes || strokes.length === 0) return null;
@@ -120,7 +145,11 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
   return (
     <View style={styles.container}>
       {/* Tarjeta de animación SVG */}
-      <Surface style={[styles.svgCard, { width: size, height: size }]} elevation={1} mode="flat">
+      <Surface
+        style={[styles.svgCard, { width: size, height: size }]}
+        elevation={1}
+        mode="flat"
+      >
         <View style={styles.svgInner}>
           <Svg width="100%" height="100%" viewBox="0 0 109 109">
             {/* Guías */}
@@ -151,17 +180,19 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
             {/* Trazos animados */}
             <G key={animationKey}>
               {isStepMode
-                ? strokes.slice(0, stepIndex + 1).map((d, i) => (
-                    <StrokeAnimated
-                      key={`s-${animationKey}-${i}`}
-                      d={d}
-                      color={getStrokeColor(i)}
-                      strokeWidth={strokeWidth}
-                      duration={currentSpeed.duration}
-                      delayMs={0}
-                      showImmediately={i < stepIndex}
-                    />
-                  ))
+                ? strokes
+                    .slice(0, stepIndex + 1)
+                    .map((d, i) => (
+                      <StrokeAnimated
+                        key={`s-${animationKey}-${i}`}
+                        d={d}
+                        color={getStrokeColor(i)}
+                        strokeWidth={strokeWidth}
+                        duration={currentSpeed.duration}
+                        delayMs={0}
+                        showImmediately={i < stepIndex}
+                      />
+                    ))
                 : strokes.map((d, i) => (
                     <StrokeAnimated
                       key={`a-${animationKey}-${i}`}
@@ -183,18 +214,30 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
         {/* Fila 1 */}
         <View style={styles.controlsRow}>
           {/* Tarjeta 1: Repetir */}
-          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+          <Surface
+            style={[styles.buttonCard, { width: buttonCardSize }]}
+            elevation={1}
+            mode="flat"
+          >
             <Pressable onPress={onReplay} style={styles.buttonPressable}>
               <RotateCcw size={28} color={COLORS.replay} strokeWidth={2.5} />
-              <Text style={[styles.buttonText, { color: COLORS.replay }]}>もう一度</Text>
+              <Text style={[styles.buttonText, { color: COLORS.replay }]}>
+                もう一度
+              </Text>
             </Pressable>
           </Surface>
 
           {/* Tarjeta 2: Velocidad */}
-          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+          <Surface
+            style={[styles.buttonCard, { width: buttonCardSize }]}
+            elevation={1}
+            mode="flat"
+          >
             <Pressable onPress={onSpeedPress} style={styles.buttonPressable}>
               <Gauge size={28} color={COLORS.speed} strokeWidth={2.5} />
-              <Text style={[styles.buttonText, { color: COLORS.speed }]}>{currentSpeed.label}</Text>
+              <Text style={[styles.buttonText, { color: COLORS.speed }]}>
+                {currentSpeed.label}
+              </Text>
             </Pressable>
           </Surface>
         </View>
@@ -211,9 +254,22 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
             elevation={1}
             mode="flat"
           >
-            <Pressable onPress={onStepPress} onLongPress={onStepLongPress} style={styles.buttonPressable}>
-              <StepForward size={28} color={isStepMode ? "#FFFFFF" : COLORS.stepByStep} strokeWidth={2.5} />
-              <Text style={[styles.buttonText, { color: isStepMode ? "#FFFFFF" : COLORS.stepByStep }]}>
+            <Pressable
+              onPress={onStepPress}
+              onLongPress={onStepLongPress}
+              style={styles.buttonPressable}
+            >
+              <StepForward
+                size={28}
+                color={isStepMode ? "#FFFFFF" : COLORS.stepByStep}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: isStepMode ? "#FFFFFF" : COLORS.stepByStep },
+                ]}
+              >
                 {isStepMode ? `${stepIndex + 1} / ${totalStrokes}` : "順番"}
               </Text>
             </Pressable>
@@ -230,13 +286,55 @@ export const KanaAnimation = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDT
             mode="flat"
           >
             <Pressable onPress={onColorPress} style={styles.buttonPressable}>
-              <Palette size={28} color={isColorMode ? "#FFFFFF" : COLORS.palette} strokeWidth={2.5} />
-              <Text style={[styles.buttonText, { color: isColorMode ? "#FFFFFF" : COLORS.palette }]}>
+              <Palette
+                size={28}
+                color={isColorMode ? "#FFFFFF" : COLORS.palette}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: isColorMode ? "#FFFFFF" : COLORS.palette },
+                ]}
+              >
                 {isColorMode ? "オン" : "色分け"}
               </Text>
             </Pressable>
           </Surface>
         </View>
+
+        {/* Botón de Audio - Ancho completo */}
+        {hasAudio && (
+          <Surface
+            style={[
+              styles.audioButton,
+              { width: size },
+              isPlayingAudio && { backgroundColor: COLORS.audio },
+            ]}
+            elevation={1}
+            mode="flat"
+          >
+            <Pressable
+              onPress={onPlayAudio}
+              disabled={isPlayingAudio}
+              style={styles.audioButtonPressable}
+            >
+              <Volume2
+                size={28}
+                color={isPlayingAudio ? "#FFFFFF" : COLORS.audio}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.audioButtonText,
+                  { color: isPlayingAudio ? "#FFFFFF" : COLORS.audio },
+                ]}
+              >
+                {isPlayingAudio ? "再生中..." : "発音を聞く"}
+              </Text>
+            </Pressable>
+          </Surface>
+        )}
       </View>
     </View>
   );
@@ -281,6 +379,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     includeFontPadding: false,
   },
+  audioButton: {
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  audioButtonPressable: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  audioButtonText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 18,
+    includeFontPadding: false,
+  },
 });
 
 // Componente de trazo animado
@@ -293,7 +409,14 @@ type StrokeAnimatedProps = {
   showImmediately: boolean;
 };
 
-const StrokeAnimated = ({ d, color, strokeWidth, duration, delayMs, showImmediately }: StrokeAnimatedProps) => {
+const StrokeAnimated = ({
+  d,
+  color,
+  strokeWidth,
+  duration,
+  delayMs,
+  showImmediately,
+}: StrokeAnimatedProps) => {
   const progress = useSharedValue(showImmediately ? 1 : 0);
 
   const pathLength = useMemo(() => {

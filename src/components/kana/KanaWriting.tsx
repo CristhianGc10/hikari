@@ -1,16 +1,36 @@
-// src/components/kana/KanaWriting.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { View, PanResponder, StyleSheet, Pressable } from "react-native";
 import { Surface, Text } from "react-native-paper";
 import Svg, { Path, G } from "react-native-svg";
 import { svgPathProperties } from "svg-path-properties";
-import { Undo2, Trash2, Eye, EyeOff, ClipboardCheck } from "lucide-react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  withDelay,
+  Easing,
+  runOnJS,
+} from "react-native-reanimated";
+import {
+  Undo2,
+  Trash2,
+  Eye,
+  EyeOff,
+  ClipboardCheck,
+  Volume2,
+} from "lucide-react-native";
 
+// --- TIPOS ---
 type KanaWritingProps = {
   strokes: string[];
   size: number;
-  strokeWidth?: number; // Grosor de trazo opcional (para caracteres combinados)
+  strokeWidth?: number;
   onComplete?: (score: number) => void;
+  onPlayAudio?: () => void;
+  hasAudio?: boolean;
+  isPlayingAudio?: boolean;
 };
 
 type Point = { x: number; y: number };
@@ -31,42 +51,39 @@ const DEFAULT_STROKE_WIDTH = 6;
 const CANVAS_VIEWBOX = 109;
 const CARD_PADDING = 20;
 
-// Colores de botones
+// Colores
 const COLORS = {
   undo: "#F5A238",
   clear: "#EF4444",
   guide: "#3B82F6",
   validate: "#10B981",
+  audio: "#EC4899",
 };
 
-// --- CONSTANTES DE VALIDACIÓN (Alta precisión 90-95%) ---
+// --- CONSTANTES DE VALIDACIÓN ---
 const MIN_POINTS_PER_STROKE = 15;
 const START_TOLERANCE = 6;
 const END_TOLERANCE = 6;
-const LENGTH_MIN_RATIO = 0.85;
-const LENGTH_MAX_RATIO = 1.15;
 const TARGET_SAMPLES = 80;
 const USER_SAMPLES_MAX = 180;
 const HAUSDORFF_MAX = 6;
 const MONOTONIC_MIN_RATIO = 0.88;
 
-// Pesos para el puntaje
 const WEIGHTS = {
   start: 0.15,
   end: 0.15,
   path: 0.35,
   length: 0.15,
-  direction: 0.20,
+  direction: 0.2,
 };
 
-// Umbral de aprobación
 const PASSING_SCORE = 85;
 
 // --- HELPERS ---
 const downsamplePoints = (points: Point[], maxPoints: number): Point[] => {
   if (points.length <= maxPoints) return points;
-  const result: Point[] = [];
   const step = points.length / maxPoints;
+  const result: Point[] = [];
   for (let i = 0; i < points.length; i += step) {
     result.push(points[Math.floor(i)]);
   }
@@ -77,7 +94,6 @@ const pathStringToPoints = (pathStr: string): Point[] => {
   const points: Point[] = [];
   const commands = pathStr.match(/[ML]\s*[\d.]+\s*[\d.]+/g);
   if (!commands) return points;
-  
   for (const cmd of commands) {
     const nums = cmd.match(/[\d.]+/g);
     if (nums && nums.length >= 2) {
@@ -105,20 +121,155 @@ const normalize = (value: number, maxBad: number): number => {
   return Math.max(0, Math.min(100, 100 - (value / maxBad) * 100));
 };
 
-export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH, onComplete }: KanaWritingProps) => {
+// --- COMPONENTE SCORE RESULT (SINCRONIZADO) ---
+const ScoreResult = ({
+  score,
+  label,
+  color,
+  onRetry,
+}: {
+  score: number;
+  label: string;
+  color: string;
+  onRetry: () => void;
+}) => {
+  const [displayScore, setDisplayScore] = useState(0);
+
+  // Valores de animación
+  const bgOpacity = useSharedValue(0);
+  const scale = useSharedValue(0.5);
+
+  // Animaciones de la Onda (Shockwave)
+  // CAMBIO 1: Empieza en 1.5 (YA FUERA del número) para evitar colisión visual
+  const waveScale = useSharedValue(1.5);
+  const waveOpacity = useSharedValue(0);
+  const waveWidth = useSharedValue(5);
+
+  useEffect(() => {
+    // A. Fondo
+    bgOpacity.value = withTiming(1, { duration: 250 });
+
+    // B. Número (El "Martillo")
+    scale.value = withSequence(
+      withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) }),
+      withSpring(1, { damping: 12, stiffness: 120 })
+    );
+
+    // C. La Onda (El "Impacto")
+    // CAMBIO 2: Delay de 250ms para asegurar que el número ya "aterrizó"
+    const WAVE_DELAY = 250;
+    const WAVE_DURATION = 1500;
+
+    // Expansión: Sale de 1.5 a 3.0 (Halo grande)
+    waveScale.value = withDelay(
+      WAVE_DELAY,
+      withTiming(3.0, {
+        duration: WAVE_DURATION,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+
+    // Opacidad: Aparece solo cuando ya es seguro (WAVE_DELAY)
+    waveOpacity.value = withDelay(
+      WAVE_DELAY,
+      withSequence(
+        withTiming(1, { duration: 50 }), // Flash visible rápido
+        withTiming(0, { duration: WAVE_DURATION - 50 }) // Fade out lento
+      )
+    );
+
+    // Grosor: Se disipa
+    waveWidth.value = withDelay(
+      WAVE_DELAY,
+      withTiming(0, {
+        duration: WAVE_DURATION,
+        easing: Easing.out(Easing.quad),
+      })
+    );
+
+    // D. Contador
+    let start = 0;
+    const duration = 1000;
+    const startTime = Date.now();
+
+    const animateCounter = () => {
+      const now = Date.now();
+      const progress = Math.min(1, (now - startTime) / duration);
+      const current = Math.round(start + (score - start) * progress);
+      setDisplayScore(current);
+      if (progress < 1) requestAnimationFrame(animateCounter);
+    };
+    requestAnimationFrame(animateCounter);
+  }, [score]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: bgOpacity.value,
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const waveStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: waveScale.value }],
+    opacity: waveOpacity.value,
+    borderWidth: waveWidth.value,
+    borderColor: color,
+  }));
+
+  return (
+    // CAMBIO 3: Arreglado el problema de zIndex en Pressable
+    <Pressable
+      onPress={onRetry}
+      style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
+    >
+      <Animated.View style={[styles.cleanOverlay, containerStyle]}>
+        <View style={styles.centeredContent}>
+          {/* Onda expansiva - Detrás del número */}
+          <Animated.View style={[styles.cleanWave, waveStyle]} />
+
+          {/* Texto - Encima de la onda */}
+          <Animated.View style={[styles.scoreGroup, contentStyle]}>
+            <Text style={[styles.cleanScoreText, { color }]}>
+              {displayScore}
+              <Text style={[styles.cleanUnitText, { color }]}>点</Text>
+            </Text>
+
+            <Text style={[styles.cleanLabelText, { color }]}>{label}</Text>
+          </Animated.View>
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
+export const KanaWriting = ({
+  strokes,
+  size,
+  strokeWidth = DEFAULT_STROKE_WIDTH,
+  onComplete,
+  onPlayAudio,
+  hasAudio = false,
+  isPlayingAudio = false,
+}: KanaWritingProps) => {
   const [userStrokes, setUserStrokes] = useState<string[]>([]);
   const [currentPath, setCurrentPath] = useState<string>("");
   const [strokeColor, setStrokeColor] = useState<string>(STROKE_COLOR);
   const [showGuide, setShowGuide] = useState(true);
-  const [validationResult, setValidationResult] = useState<"success" | "error" | null>(null);
+  const [validationResult, setValidationResult] = useState<
+    "success" | "error" | null
+  >(null);
   const [finalScore, setFinalScore] = useState<number | null>(null);
-  const [canvasSize, setCanvasSize] = useState({ width: CANVAS_VIEWBOX, height: CANVAS_VIEWBOX });
+  const [canvasSize, setCanvasSize] = useState({
+    width: CANVAS_VIEWBOX,
+    height: CANVAS_VIEWBOX,
+  });
 
   const currentPoints = useRef<Point[]>([]);
   const currentStrokeIndex = userStrokes.length;
-  const isFinished = validationResult === "success";
+  const isFinished = finalScore !== null;
   const canValidate = userStrokes.length === strokes.length;
-
   const innerTargetSize = size - CARD_PADDING * 2;
 
   useEffect(() => {
@@ -136,56 +287,53 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
 
   const undoLastStroke = () => {
     if (userStrokes.length > 0) {
-      setUserStrokes(prev => prev.slice(0, -1));
+      setUserStrokes((prev) => prev.slice(0, -1));
       setValidationResult(null);
       setFinalScore(null);
     }
   };
 
   const toggleGuide = () => {
-    setShowGuide(prev => !prev);
+    setShowGuide((prev) => !prev);
   };
 
-  // --- VALIDACIÓN AVANZADA ---
-  const validateStroke = (userPathStr: string, targetPathStr: string): StrokeScore | null => {
+  const validateStroke = (
+    userPathStr: string,
+    targetPathStr: string
+  ): StrokeScore | null => {
     try {
       const targetProps = new svgPathProperties(targetPathStr);
       const targetLength = targetProps.getTotalLength();
-
       const userPoints = pathStringToPoints(userPathStr);
-      if (userPoints.length < MIN_POINTS_PER_STROKE) {
-        return null;
-      }
+      if (userPoints.length < MIN_POINTS_PER_STROKE) return null;
 
       const userLength = calculatePathLength(userPoints);
 
-      // 1. Precisión del punto de inicio
-      const startTarget = targetProps.getPointAtLength(0);
-      const startUser = userPoints[0];
-      const startDist = distance(startUser, startTarget);
-      const startAccuracy = normalize(startDist, START_TOLERANCE * 2);
+      const startAccuracy = normalize(
+        distance(userPoints[0], targetProps.getPointAtLength(0)),
+        START_TOLERANCE * 2
+      );
+      const endAccuracy = normalize(
+        distance(
+          userPoints[userPoints.length - 1],
+          targetProps.getPointAtLength(targetLength)
+        ),
+        END_TOLERANCE * 2
+      );
+      const lengthAccuracy = normalize(
+        Math.abs(1 - userLength / targetLength),
+        0.3
+      );
 
-      // 2. Precisión del punto final
-      const endTarget = targetProps.getPointAtLength(targetLength);
-      const endUser = userPoints[userPoints.length - 1];
-      const endDist = distance(endUser, endTarget);
-      const endAccuracy = normalize(endDist, END_TOLERANCE * 2);
-
-      // 3. Precisión de la longitud
-      const lengthRatio = userLength / targetLength;
-      const lengthDeviation = Math.abs(1 - lengthRatio);
-      const lengthAccuracy = normalize(lengthDeviation, 0.3);
-
-      // 4. Muestrear la guía objetivo
       const targetSamples: Point[] = [];
       for (let i = 0; i <= TARGET_SAMPLES; i++) {
-        const p = targetProps.getPointAtLength((targetLength * i) / TARGET_SAMPLES);
+        const p = targetProps.getPointAtLength(
+          (targetLength * i) / TARGET_SAMPLES
+        );
         targetSamples.push({ x: p.x, y: p.y });
       }
-
       const sampledUser = downsamplePoints(userPoints, USER_SAMPLES_MAX);
 
-      // 5. Distancia Hausdorff bidireccional
       let maxDistUserToTarget = 0;
       const nearestIndices: number[] = [];
 
@@ -212,19 +360,19 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
         }
         maxDistTargetToUser = Math.max(maxDistTargetToUser, minDist);
       }
+      const pathAccuracy = normalize(
+        Math.max(maxDistUserToTarget, maxDistTargetToUser),
+        HAUSDORFF_MAX * 2
+      );
 
-      const hausdorff = Math.max(maxDistUserToTarget, maxDistTargetToUser);
-      const pathAccuracy = normalize(hausdorff, HAUSDORFF_MAX * 2);
-
-      // 6. Monotonicidad
       let forwardSteps = 0;
       for (let i = 1; i < nearestIndices.length; i++) {
-        if (nearestIndices[i] >= nearestIndices[i - 1]) {
-          forwardSteps++;
-        }
+        if (nearestIndices[i] >= nearestIndices[i - 1]) forwardSteps++;
       }
-      const monotonicRatio = forwardSteps / (nearestIndices.length - 1 || 1);
-      const directionAccuracy = normalize(1 - monotonicRatio, 1 - MONOTONIC_MIN_RATIO);
+      const directionAccuracy = normalize(
+        1 - forwardSteps / (nearestIndices.length - 1 || 1),
+        1 - MONOTONIC_MIN_RATIO
+      );
 
       const total =
         startAccuracy * WEIGHTS.start +
@@ -248,7 +396,6 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
 
   const validateDrawing = () => {
     if (!canValidate) return;
-
     let totalScore = 0;
     let validCount = 0;
 
@@ -269,99 +416,90 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
       if (onComplete) onComplete(roundedScore);
     } else {
       setValidationResult("error");
-      setTimeout(() => {
-        setValidationResult(null);
-        setFinalScore(null);
-      }, 1500);
     }
   };
 
-  // PanResponder para dibujar
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => !isFinished && currentStrokeIndex < strokes.length,
-    onMoveShouldSetPanResponder: () => !isFinished && currentStrokeIndex < strokes.length,
-
-    onPanResponderGrant: (evt) => {
-      const { locationX, locationY } = evt.nativeEvent;
-      const scaleX = CANVAS_VIEWBOX / canvasSize.width;
-      const scaleY = CANVAS_VIEWBOX / canvasSize.height;
-      const x = locationX * scaleX;
-      const y = locationY * scaleY;
-
-      currentPoints.current = [{ x, y }];
-      setCurrentPath(`M ${x} ${y}`);
-      setStrokeColor(STROKE_COLOR);
-    },
-
-    onPanResponderMove: (evt) => {
-      const { locationX, locationY } = evt.nativeEvent;
-      const scaleX = CANVAS_VIEWBOX / canvasSize.width;
-      const scaleY = CANVAS_VIEWBOX / canvasSize.height;
-      const x = locationX * scaleX;
-      const y = locationY * scaleY;
-
-      currentPoints.current.push({ x, y });
-      setCurrentPath(prev => `${prev} L ${x} ${y}`);
-    },
-
-    onPanResponderRelease: () => {
-      if (currentPath && currentPoints.current.length >= MIN_POINTS_PER_STROKE) {
-        setUserStrokes(prev => [...prev, currentPath]);
-      }
-      setCurrentPath("");
-      currentPoints.current = [];
-    },
-  }), [canvasSize, isFinished, currentStrokeIndex, strokes.length, currentPath]);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () =>
+          !isFinished && currentStrokeIndex < strokes.length,
+        onMoveShouldSetPanResponder: () =>
+          !isFinished && currentStrokeIndex < strokes.length,
+        onPanResponderGrant: (evt) => {
+          const { locationX, locationY } = evt.nativeEvent;
+          const scaleX = CANVAS_VIEWBOX / canvasSize.width;
+          const scaleY = CANVAS_VIEWBOX / canvasSize.height;
+          const x = locationX * scaleX;
+          const y = locationY * scaleY;
+          currentPoints.current = [{ x, y }];
+          setCurrentPath(`M ${x} ${y}`);
+          setStrokeColor(STROKE_COLOR);
+        },
+        onPanResponderMove: (evt) => {
+          const { locationX, locationY } = evt.nativeEvent;
+          const scaleX = CANVAS_VIEWBOX / canvasSize.width;
+          const scaleY = CANVAS_VIEWBOX / canvasSize.height;
+          const x = locationX * scaleX;
+          const y = locationY * scaleY;
+          currentPoints.current.push({ x, y });
+          setCurrentPath((prev) => `${prev} L ${x} ${y}`);
+        },
+        onPanResponderRelease: () => {
+          if (
+            currentPath &&
+            currentPoints.current.length >= MIN_POINTS_PER_STROKE
+          ) {
+            setUserStrokes((prev) => [...prev, currentPath]);
+          }
+          setCurrentPath("");
+          currentPoints.current = [];
+        },
+      }),
+    [canvasSize, isFinished, currentStrokeIndex, strokes.length, currentPath]
+  );
 
   if (!strokes || strokes.length === 0) return null;
 
   const GAP = 12;
   const buttonCardSize = (size - GAP) / 2;
 
-  // Color del puntaje según el resultado
   const getScoreColor = (score: number): string => {
-    if (score >= 95) return "#10B981"; // Verde - Perfecto
-    if (score >= 90) return "#22C55E"; // Verde claro - Excelente
-    if (score >= 85) return "#84CC16"; // Lima - Muy bien (aprobado)
-    if (score >= 75) return "#F5A238"; // Naranja - Bien
-    if (score >= 65) return "#F97316"; // Naranja oscuro - Regular
-    return "#EF4444"; // Rojo - Necesita práctica
+    if (score >= 95) return "#10B981"; // Verde intenso
+    if (score >= 85) return "#84CC16"; // Verde lima
+    if (score >= 65) return "#F97316"; // Naranja
+    return "#EF4444"; // Rojo
   };
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 95) return "完璧!"; // Perfecto
-    if (score >= 90) return "素晴らしい!"; // Excelente
-    if (score >= 85) return "合格!"; // Aprobado
-    if (score >= 75) return "もう少し!"; // Un poco más
-    if (score >= 65) return "頑張って!"; // Sigue intentando
-    return "練習しよう!"; // Practiquemos
+    if (score >= 95) return "完璧!";
+    if (score >= 85) return "合格!";
+    if (score >= 65) return "惜しい!";
+    return "練習しよう";
   };
 
   return (
     <View style={styles.container}>
-      {/* Área de escritura */}
-      <Surface style={[styles.writingCard, { width: size, height: size }]} elevation={1} mode="flat">
+      {/* TARJETA DE ESCRITURA */}
+      <Surface
+        style={[styles.writingCard, { width: size, height: size }]}
+        elevation={1}
+        mode="flat"
+      >
         <View style={styles.canvasContainer}>
           <View
             style={{ width: innerTargetSize, height: innerTargetSize }}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              setCanvasSize({ width, height });
-            }}
+            onLayout={(e) => setCanvasSize(e.nativeEvent.layout)}
             {...panResponder.panHandlers}
           >
             <Svg width="100%" height="100%" viewBox="0 0 109 109">
-              {/* Guías de fondo */}
               <G opacity={0.1}>
                 <Path
                   d="M54.5,0 L54.5,109 M0,54.5 L109,54.5"
                   stroke="#000"
-                  strokeWidth={1}
                   strokeDasharray="4,4"
                 />
               </G>
-
-              {/* Guía del kana */}
               {showGuide && (
                 <G opacity={0.25}>
                   {strokes.map((d, i) => (
@@ -377,27 +515,17 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
                   ))}
                 </G>
               )}
-
-              {/* Trazos completados del usuario */}
               {userStrokes.map((d, i) => (
                 <Path
                   key={`user-${i}`}
                   d={d}
-                  stroke={
-                    validationResult === "success"
-                      ? COLORS.validate
-                      : validationResult === "error"
-                      ? COLORS.clear
-                      : STROKE_COLOR
-                  }
+                  stroke={STROKE_COLOR}
                   strokeWidth={strokeWidth}
                   fill="none"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               ))}
-
-              {/* Trazo actual */}
               {currentPath && (
                 <Path
                   d={currentPath}
@@ -413,40 +541,31 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
           </View>
         </View>
 
-        {/* Overlay de éxito con puntaje */}
-        {validationResult === "success" && finalScore !== null && (
-          <View style={styles.successOverlay}>
-            <Text style={[styles.scoreText, { color: getScoreColor(finalScore) }]}>
-              {finalScore}点
-            </Text>
-            <Text style={[styles.scoreLabelText, { color: getScoreColor(finalScore) }]}>
-              {getScoreLabel(finalScore)}
-            </Text>
-            <Pressable onPress={resetAll} style={[styles.retryButton, { backgroundColor: getScoreColor(finalScore) }]}>
-              <Text style={styles.retryButtonText}>もう一度</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Overlay de error con puntaje */}
-        {validationResult === "error" && finalScore !== null && (
-          <View style={styles.errorOverlay}>
-            <Text style={styles.errorScoreText}>{finalScore}点</Text>
-            <Text style={styles.errorText}>{getScoreLabel(finalScore)}</Text>
-          </View>
+        {/* OVERLAY DE RESULTADO */}
+        {finalScore !== null && (
+          <ScoreResult
+            score={finalScore}
+            label={getScoreLabel(finalScore)}
+            color={getScoreColor(finalScore)}
+            onRetry={resetAll}
+          />
         )}
       </Surface>
 
-      {/* Panel de controles - Grid 2x2 */}
+      {/* CONTROLES */}
       <View style={[styles.controlsGrid, { width: size }]}>
-        {/* Fila 1 */}
         <View style={styles.controlsRow}>
-          {/* Tarjeta 1: Deshacer */}
-          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+          <Surface
+            style={[styles.buttonCard, { width: buttonCardSize }]}
+            mode="flat"
+          >
             <Pressable
               onPress={undoLastStroke}
-              style={[styles.buttonPressable, userStrokes.length === 0 && styles.buttonDisabled]}
               disabled={userStrokes.length === 0}
+              style={[
+                styles.buttonPressable,
+                userStrokes.length === 0 && styles.buttonDisabled,
+              ]}
             >
               <Undo2
                 size={28}
@@ -463,13 +582,17 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
               </Text>
             </Pressable>
           </Surface>
-
-          {/* Tarjeta 2: Borrar todo */}
-          <Surface style={[styles.buttonCard, { width: buttonCardSize }]} elevation={1} mode="flat">
+          <Surface
+            style={[styles.buttonCard, { width: buttonCardSize }]}
+            mode="flat"
+          >
             <Pressable
               onPress={resetAll}
-              style={[styles.buttonPressable, userStrokes.length === 0 && styles.buttonDisabled]}
               disabled={userStrokes.length === 0}
+              style={[
+                styles.buttonPressable,
+                userStrokes.length === 0 && styles.buttonDisabled,
+              ]}
             >
               <Trash2
                 size={28}
@@ -488,16 +611,13 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
           </Surface>
         </View>
 
-        {/* Fila 2 */}
         <View style={styles.controlsRow}>
-          {/* Tarjeta 3: Mostrar/Ocultar guía - Invertido */}
           <Surface
             style={[
               styles.buttonCard,
               { width: buttonCardSize },
               !showGuide && { backgroundColor: COLORS.guide },
             ]}
-            elevation={1}
             mode="flat"
           >
             <Pressable onPress={toggleGuide} style={styles.buttonPressable}>
@@ -507,41 +627,68 @@ export const KanaWriting = ({ strokes, size, strokeWidth = DEFAULT_STROKE_WIDTH,
                 <EyeOff size={28} color="#FFFFFF" strokeWidth={2.5} />
               )}
               <Text
-                style={[styles.buttonText, { color: showGuide ? COLORS.guide : "#FFFFFF" }]}
+                style={[
+                  styles.buttonText,
+                  { color: showGuide ? COLORS.guide : "#FFFFFF" },
+                ]}
               >
                 {showGuide ? "ガイド" : "非表示"}
               </Text>
             </Pressable>
           </Surface>
-
-          {/* Tarjeta 4: Revisar */}
           <Surface
             style={[styles.buttonCard, { width: buttonCardSize }]}
-            elevation={1}
             mode="flat"
           >
-            <Pressable
-              onPress={validateDrawing}
-              style={styles.buttonPressable}
-            >
+            <Pressable onPress={validateDrawing} style={styles.buttonPressable}>
               <ClipboardCheck
                 size={28}
                 color={COLORS.validate}
                 strokeWidth={2.5}
               />
-              <Text
-                style={[styles.buttonText, { color: COLORS.validate }]}
-              >
+              <Text style={[styles.buttonText, { color: COLORS.validate }]}>
                 採点
               </Text>
             </Pressable>
           </Surface>
         </View>
+
+        {hasAudio && (
+          <Surface
+            style={[
+              styles.audioButton,
+              { width: size },
+              isPlayingAudio && { backgroundColor: COLORS.audio },
+            ]}
+            mode="flat"
+          >
+            <Pressable
+              onPress={onPlayAudio}
+              disabled={isPlayingAudio}
+              style={styles.audioButtonPressable}
+            >
+              <Volume2
+                size={28}
+                color={isPlayingAudio ? "#FFFFFF" : COLORS.audio}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.audioButtonText,
+                  { color: isPlayingAudio ? "#FFFFFF" : COLORS.audio },
+                ]}
+              >
+                {isPlayingAudio ? "再生中..." : "発音を聞く"}
+              </Text>
+            </Pressable>
+          </Surface>
+        )}
       </View>
     </View>
   );
 };
 
+// --- ESTILOS ---
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
@@ -585,50 +732,68 @@ const styles = StyleSheet.create({
     fontSize: 15,
     includeFontPadding: false,
   },
-  successOverlay: {
+  // --- ESTILOS DE RESULTADO (LIMPIO Y CENTRADO) ---
+  cleanOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)", // Fondo blanco casi solido
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
   },
-  scoreText: {
-    fontFamily: "NotoSansJP_700Bold",
-    fontSize: 56,
-    includeFontPadding: false,
-  },
-  scoreLabelText: {
-    fontFamily: "NotoSansJP_700Bold",
-    fontSize: 22,
-    includeFontPadding: false,
-    marginBottom: 16,
-  },
-  retryButton: {
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  retryButtonText: {
-    fontFamily: "NotoSansJP_700Bold",
-    fontSize: 16,
-    color: "#FFFFFF",
-  },
-  errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(239, 68, 68, 0.95)",
+  centeredContent: {
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
+    width: 200, // Contenedor fijo para alinear onda y texto
+    height: 200,
+    position: "relative",
   },
-  errorScoreText: {
+  cleanWave: {
+    position: "absolute",
+    width: 160, // Aumentado ligeramente para mayor seguridad visual
+    height: 160,
+    borderRadius: 80,
+    zIndex: 0,
+  },
+  scoreGroup: {
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  cleanScoreText: {
     fontFamily: "NotoSansJP_700Bold",
-    fontSize: 48,
-    color: "#FFFFFF",
+    fontSize: 88,
+    lineHeight: 100,
     includeFontPadding: false,
+    textAlign: "center",
   },
-  errorText: {
+  cleanUnitText: {
+    fontSize: 24,
+    fontWeight: "600",
+  },
+  cleanLabelText: {
     fontFamily: "NotoSansJP_700Bold",
-    fontSize: 22,
-    color: "#FFFFFF",
+    fontSize: 24,
+    marginTop: -5,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    textAlign: "center",
+  },
+  // ---
+  audioButton: {
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  audioButtonPressable: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  audioButtonText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 18,
+    includeFontPadding: false,
   },
 });
