@@ -3,16 +3,6 @@ import { View, PanResponder, StyleSheet, Pressable } from "react-native";
 import { Surface, Text } from "react-native-paper";
 import Svg, { Path, G } from "react-native-svg";
 import { svgPathProperties } from "svg-path-properties";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  withSequence,
-  withDelay,
-  Easing,
-  runOnJS,
-} from "react-native-reanimated";
 import {
   Undo2,
   Trash2,
@@ -21,6 +11,9 @@ import {
   ClipboardCheck,
   Volume2,
 } from "lucide-react-native";
+
+// Asegúrate de que este archivo contiene el código nuevo de la animación japonesa
+import { ScoreOverlayMorphing } from "./ScoreOverlayMorphing";
 
 // --- TIPOS ---
 type KanaWritingProps = {
@@ -51,7 +44,7 @@ const DEFAULT_STROKE_WIDTH = 6;
 const CANVAS_VIEWBOX = 109;
 const CARD_PADDING = 20;
 
-// Colores
+// Colores UI
 const COLORS = {
   undo: "#F5A238",
   clear: "#EF4444",
@@ -79,7 +72,7 @@ const WEIGHTS = {
 
 const PASSING_SCORE = 85;
 
-// --- HELPERS ---
+// --- HELPERS (Matemáticas para validar el trazo) ---
 const downsamplePoints = (points: Point[], maxPoints: number): Point[] => {
   if (points.length <= maxPoints) return points;
   const step = points.length / maxPoints;
@@ -121,128 +114,6 @@ const normalize = (value: number, maxBad: number): number => {
   return Math.max(0, Math.min(100, 100 - (value / maxBad) * 100));
 };
 
-// --- COMPONENTE SCORE RESULT (SINCRONIZADO) ---
-const ScoreResult = ({
-  score,
-  label,
-  color,
-  onRetry,
-}: {
-  score: number;
-  label: string;
-  color: string;
-  onRetry: () => void;
-}) => {
-  const [displayScore, setDisplayScore] = useState(0);
-
-  // Valores de animación
-  const bgOpacity = useSharedValue(0);
-  const scale = useSharedValue(0.5);
-
-  // Animaciones de la Onda (Shockwave)
-  // CAMBIO 1: Empieza en 1.5 (YA FUERA del número) para evitar colisión visual
-  const waveScale = useSharedValue(1.5);
-  const waveOpacity = useSharedValue(0);
-  const waveWidth = useSharedValue(5);
-
-  useEffect(() => {
-    // A. Fondo
-    bgOpacity.value = withTiming(1, { duration: 250 });
-
-    // B. Número (El "Martillo")
-    scale.value = withSequence(
-      withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) }),
-      withSpring(1, { damping: 12, stiffness: 120 })
-    );
-
-    // C. La Onda (El "Impacto")
-    // CAMBIO 2: Delay de 250ms para asegurar que el número ya "aterrizó"
-    const WAVE_DELAY = 250;
-    const WAVE_DURATION = 1500;
-
-    // Expansión: Sale de 1.5 a 3.0 (Halo grande)
-    waveScale.value = withDelay(
-      WAVE_DELAY,
-      withTiming(3.0, {
-        duration: WAVE_DURATION,
-        easing: Easing.out(Easing.cubic),
-      })
-    );
-
-    // Opacidad: Aparece solo cuando ya es seguro (WAVE_DELAY)
-    waveOpacity.value = withDelay(
-      WAVE_DELAY,
-      withSequence(
-        withTiming(1, { duration: 50 }), // Flash visible rápido
-        withTiming(0, { duration: WAVE_DURATION - 50 }) // Fade out lento
-      )
-    );
-
-    // Grosor: Se disipa
-    waveWidth.value = withDelay(
-      WAVE_DELAY,
-      withTiming(0, {
-        duration: WAVE_DURATION,
-        easing: Easing.out(Easing.quad),
-      })
-    );
-
-    // D. Contador
-    let start = 0;
-    const duration = 1000;
-    const startTime = Date.now();
-
-    const animateCounter = () => {
-      const now = Date.now();
-      const progress = Math.min(1, (now - startTime) / duration);
-      const current = Math.round(start + (score - start) * progress);
-      setDisplayScore(current);
-      if (progress < 1) requestAnimationFrame(animateCounter);
-    };
-    requestAnimationFrame(animateCounter);
-  }, [score]);
-
-  const containerStyle = useAnimatedStyle(() => ({
-    opacity: bgOpacity.value,
-  }));
-
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const waveStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: waveScale.value }],
-    opacity: waveOpacity.value,
-    borderWidth: waveWidth.value,
-    borderColor: color,
-  }));
-
-  return (
-    // CAMBIO 3: Arreglado el problema de zIndex en Pressable
-    <Pressable
-      onPress={onRetry}
-      style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
-    >
-      <Animated.View style={[styles.cleanOverlay, containerStyle]}>
-        <View style={styles.centeredContent}>
-          {/* Onda expansiva - Detrás del número */}
-          <Animated.View style={[styles.cleanWave, waveStyle]} />
-
-          {/* Texto - Encima de la onda */}
-          <Animated.View style={[styles.scoreGroup, contentStyle]}>
-            <Text style={[styles.cleanScoreText, { color }]}>
-              {displayScore}
-              <Text style={[styles.cleanUnitText, { color }]}>点</Text>
-            </Text>
-
-            <Text style={[styles.cleanLabelText, { color }]}>{label}</Text>
-          </Animated.View>
-        </View>
-      </Animated.View>
-    </Pressable>
-  );
-};
-
 // --- COMPONENTE PRINCIPAL ---
 export const KanaWriting = ({
   strokes,
@@ -257,9 +128,6 @@ export const KanaWriting = ({
   const [currentPath, setCurrentPath] = useState<string>("");
   const [strokeColor, setStrokeColor] = useState<string>(STROKE_COLOR);
   const [showGuide, setShowGuide] = useState(true);
-  const [validationResult, setValidationResult] = useState<
-    "success" | "error" | null
-  >(null);
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [canvasSize, setCanvasSize] = useState({
     width: CANVAS_VIEWBOX,
@@ -280,7 +148,6 @@ export const KanaWriting = ({
     setUserStrokes([]);
     setCurrentPath("");
     setStrokeColor(STROKE_COLOR);
-    setValidationResult(null);
     setFinalScore(null);
     currentPoints.current = [];
   };
@@ -288,7 +155,6 @@ export const KanaWriting = ({
   const undoLastStroke = () => {
     if (userStrokes.length > 0) {
       setUserStrokes((prev) => prev.slice(0, -1));
-      setValidationResult(null);
       setFinalScore(null);
     }
   };
@@ -297,6 +163,7 @@ export const KanaWriting = ({
     setShowGuide((prev) => !prev);
   };
 
+  // --- LÓGICA DE VALIDACIÓN ---
   const validateStroke = (
     userPathStr: string,
     targetPathStr: string
@@ -354,6 +221,7 @@ export const KanaWriting = ({
       let maxDistTargetToUser = 0;
       for (const tp of targetSamples) {
         let minDist = Infinity;
+        let bestIdx = 0;
         for (const up of sampledUser) {
           const d = distance(up, tp);
           if (d < minDist) minDist = d;
@@ -412,13 +280,11 @@ export const KanaWriting = ({
     setFinalScore(roundedScore);
 
     if (roundedScore >= PASSING_SCORE) {
-      setValidationResult("success");
       if (onComplete) onComplete(roundedScore);
-    } else {
-      setValidationResult("error");
     }
   };
 
+  // --- PAN RESPONDER ---
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -464,18 +330,18 @@ export const KanaWriting = ({
   const GAP = 12;
   const buttonCardSize = (size - GAP) / 2;
 
+  const getScoreLabel = (score: number): string => {
+    if (score >= 95) return "達人"; // Tatsujin (Master)
+    if (score >= 85) return "見事"; // Migoto (Splendid)
+    if (score >= 65) return "上出来"; // Joudeki (Good job)
+    return "修行"; // Shugyou (Training)
+  };
+
   const getScoreColor = (score: number): string => {
     if (score >= 95) return "#10B981"; // Verde intenso
     if (score >= 85) return "#84CC16"; // Verde lima
     if (score >= 65) return "#F97316"; // Naranja
     return "#EF4444"; // Rojo
-  };
-
-  const getScoreLabel = (score: number): string => {
-    if (score >= 95) return "完璧!";
-    if (score >= 85) return "合格!";
-    if (score >= 65) return "惜しい!";
-    return "練習しよう";
   };
 
   return (
@@ -541,12 +407,12 @@ export const KanaWriting = ({
           </View>
         </View>
 
-        {/* OVERLAY DE RESULTADO */}
+        {/* OVERLAY DE RESULTADO - Nueva Animación */}
         {finalScore !== null && (
-          <ScoreResult
+          <ScoreOverlayMorphing
             score={finalScore}
             label={getScoreLabel(finalScore)}
-            color={getScoreColor(finalScore)}
+            color={getScoreColor(finalScore)} // <--- Aquí estaba el error
             onRetry={resetAll}
           />
         )}
@@ -602,7 +468,9 @@ export const KanaWriting = ({
               <Text
                 style={[
                   styles.buttonText,
-                  { color: userStrokes.length > 0 ? COLORS.clear : "#D1D5DB" },
+                  {
+                    color: userStrokes.length > 0 ? COLORS.clear : "#D1D5DB",
+                  },
                 ]}
               >
                 消す
@@ -688,7 +556,7 @@ export const KanaWriting = ({
   );
 };
 
-// --- ESTILOS ---
+// --- ESTILOS LIMPIOS ---
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
@@ -697,13 +565,16 @@ const styles = StyleSheet.create({
   writingCard: {
     borderRadius: 32,
     backgroundColor: "#FFFFFF",
-    overflow: "hidden",
+    // overflow: "hidden", // <--- ELIMINADO para que las hojas y efectos salgan del borde
   },
   canvasContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: CARD_PADDING,
+    // Aseguramos que el canvas no se salga, pero el overlay sí pueda
+    overflow: "hidden",
+    borderRadius: 32,
   },
   controlsGrid: {
     gap: 12,
@@ -732,52 +603,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     includeFontPadding: false,
   },
-  // --- ESTILOS DE RESULTADO (LIMPIO Y CENTRADO) ---
-  cleanOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.96)", // Fondo blanco casi solido
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  centeredContent: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 200, // Contenedor fijo para alinear onda y texto
-    height: 200,
-    position: "relative",
-  },
-  cleanWave: {
-    position: "absolute",
-    width: 160, // Aumentado ligeramente para mayor seguridad visual
-    height: 160,
-    borderRadius: 80,
-    zIndex: 0,
-  },
-  scoreGroup: {
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1,
-  },
-  cleanScoreText: {
-    fontFamily: "NotoSansJP_700Bold",
-    fontSize: 88,
-    lineHeight: 100,
-    includeFontPadding: false,
-    textAlign: "center",
-  },
-  cleanUnitText: {
-    fontSize: 24,
-    fontWeight: "600",
-  },
-  cleanLabelText: {
-    fontFamily: "NotoSansJP_700Bold",
-    fontSize: 24,
-    marginTop: -5,
-    textTransform: "uppercase",
-    letterSpacing: 2,
-    textAlign: "center",
-  },
-  // ---
   audioButton: {
     height: 64,
     borderRadius: 20,
