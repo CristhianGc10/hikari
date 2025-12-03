@@ -344,7 +344,7 @@ export const KanaAnimation = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
   svgCard: {
     borderRadius: 32,
@@ -356,14 +356,14 @@ const styles = StyleSheet.create({
     padding: CARD_PADDING,
   },
   controlsGrid: {
-    gap: 12,
+    gap: 10,
   },
   controlsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
   buttonCard: {
-    height: 88,
+    height: 85,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   audioButton: {
-    height: 64,
+    height: 85,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",

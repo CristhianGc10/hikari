@@ -12,8 +12,7 @@ import {
   Volume2,
 } from "lucide-react-native";
 
-// Asegúrate de que este archivo contiene el código nuevo de la animación japonesa
-import { ScoreOverlayMorphing } from "./ScoreOverlayMorphing";
+import { ScoreOverlay } from "./ScoreOverlay";
 
 // --- TIPOS ---
 type KanaWritingProps = {
@@ -53,21 +52,22 @@ const COLORS = {
   audio: "#EC4899",
 };
 
-// --- CONSTANTES DE VALIDACIÓN ---
-const MIN_POINTS_PER_STROKE = 15;
-const START_TOLERANCE = 6;
-const END_TOLERANCE = 6;
-const TARGET_SAMPLES = 80;
-const USER_SAMPLES_MAX = 180;
-const HAUSDORFF_MAX = 6;
-const MONOTONIC_MIN_RATIO = 0.88;
+// --- CONSTANTES DE VALIDACIÓN MEJORADAS ---
+const MIN_POINTS_PER_STROKE = 10; // Reducido (antes 15)
+const START_TOLERANCE = 10; // Aumentado (antes 6)
+const END_TOLERANCE = 10; // Aumentado (antes 6)
+const TARGET_SAMPLES = 60; // Reducido para más tolerancia (antes 80)
+const USER_SAMPLES_MAX = 120; // Reducido (antes 180)
+const HAUSDORFF_MAX = 10; // Aumentado (antes 6)
+const MONOTONIC_MIN_RATIO = 0.75; // Reducido (antes 0.88)
 
+// Pesos rebalanceados - menos énfasis en inicio/fin exacto
 const WEIGHTS = {
-  start: 0.15,
-  end: 0.15,
-  path: 0.35,
-  length: 0.15,
-  direction: 0.2,
+  start: 0.1, // Reducido (antes 0.15)
+  end: 0.1, // Reducido (antes 0.15)
+  path: 0.45, // Aumentado - lo más importante es la forma (antes 0.35)
+  length: 0.15, // Igual
+  direction: 0.2, // Igual
 };
 
 const PASSING_SCORE = 85;
@@ -81,6 +81,37 @@ const downsamplePoints = (points: Point[], maxPoints: number): Point[] => {
     result.push(points[Math.floor(i)]);
   }
   return result;
+};
+
+// Suavizado de puntos para eliminar ruido del dedo
+const smoothPoints = (points: Point[], windowSize: number = 3): Point[] => {
+  if (points.length < windowSize) return points;
+
+  const smoothed: Point[] = [];
+  const half = Math.floor(windowSize / 2);
+
+  for (let i = 0; i < points.length; i++) {
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+
+    for (
+      let j = Math.max(0, i - half);
+      j <= Math.min(points.length - 1, i + half);
+      j++
+    ) {
+      sumX += points[j].x;
+      sumY += points[j].y;
+      count++;
+    }
+
+    smoothed.push({
+      x: sumX / count,
+      y: sumY / count,
+    });
+  }
+
+  return smoothed;
 };
 
 const pathStringToPoints = (pathStr: string): Point[] => {
@@ -174,15 +205,17 @@ export const KanaWriting = ({
       const userPoints = pathStringToPoints(userPathStr);
       if (userPoints.length < MIN_POINTS_PER_STROKE) return null;
 
-      const userLength = calculatePathLength(userPoints);
+      const smoothedPoints = smoothPoints(userPoints, 5);
+
+      const userLength = calculatePathLength(smoothedPoints);
 
       const startAccuracy = normalize(
-        distance(userPoints[0], targetProps.getPointAtLength(0)),
+        distance(smoothedPoints[0], targetProps.getPointAtLength(0)),
         START_TOLERANCE * 2
       );
       const endAccuracy = normalize(
         distance(
-          userPoints[userPoints.length - 1],
+          smoothedPoints[smoothedPoints.length - 1],
           targetProps.getPointAtLength(targetLength)
         ),
         END_TOLERANCE * 2
@@ -199,7 +232,7 @@ export const KanaWriting = ({
         );
         targetSamples.push({ x: p.x, y: p.y });
       }
-      const sampledUser = downsamplePoints(userPoints, USER_SAMPLES_MAX);
+      const sampledUser = downsamplePoints(smoothedPoints, USER_SAMPLES_MAX);
 
       let maxDistUserToTarget = 0;
       const nearestIndices: number[] = [];
@@ -331,16 +364,26 @@ export const KanaWriting = ({
   const buttonCardSize = (size - GAP) / 2;
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 95) return "達人"; // Tatsujin (Master)
-    if (score >= 85) return "見事"; // Migoto (Splendid)
-    if (score >= 65) return "上出来"; // Joudeki (Good job)
-    return "修行"; // Shugyou (Training)
+    if (score >= 98) return "完璧"; // Kanpeki (Perfecto)
+    if (score >= 95) return "達人"; // Tatsujin (Maestro)
+    if (score >= 90) return "素晴らしい"; // Subarashii (Maravilloso)
+    if (score >= 85) return "見事"; // Migoto (Espléndido)
+    if (score >= 80) return "上手"; // Jouzu (Hábil)
+    if (score >= 70) return "上出来"; // Joudeki (Bien hecho)
+    if (score >= 60) return "良い"; // Yoi (Bueno)
+    if (score >= 50) return "まあまあ"; // Maamaa (Regular)
+    return "修行"; // Shugyou (Entrenamiento)
   };
 
   const getScoreColor = (score: number): string => {
-    if (score >= 95) return "#10B981"; // Verde intenso
+    if (score >= 98) return "#FFD700"; // Dorado
+    if (score >= 95) return "#10B981"; // Verde esmeralda
+    if (score >= 90) return "#22C55E"; // Verde
     if (score >= 85) return "#84CC16"; // Verde lima
-    if (score >= 65) return "#F97316"; // Naranja
+    if (score >= 80) return "#A3E635"; // Lima brillante
+    if (score >= 70) return "#FACC15"; // Amarillo
+    if (score >= 60) return "#FB923C"; // Naranja claro
+    if (score >= 50) return "#F97316"; // Naranja
     return "#EF4444"; // Rojo
   };
 
@@ -409,10 +452,10 @@ export const KanaWriting = ({
 
         {/* OVERLAY DE RESULTADO - Nueva Animación */}
         {finalScore !== null && (
-          <ScoreOverlayMorphing
+          <ScoreOverlay
             score={finalScore}
             label={getScoreLabel(finalScore)}
-            color={getScoreColor(finalScore)} // <--- Aquí estaba el error
+            color={getScoreColor(finalScore)}
             onRetry={resetAll}
           />
         )}
@@ -560,7 +603,7 @@ export const KanaWriting = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
   writingCard: {
     borderRadius: 32,
@@ -577,14 +620,14 @@ const styles = StyleSheet.create({
     borderRadius: 32,
   },
   controlsGrid: {
-    gap: 12,
+    gap: 10,
   },
   controlsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
   buttonCard: {
-    height: 88,
+    height: 85,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
@@ -604,7 +647,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   audioButton: {
-    height: 64,
+    height: 85,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",

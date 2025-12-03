@@ -271,9 +271,7 @@ export default function KanaPracticeScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Selector de modo */}
-      <View
-        style={{ paddingHorizontal: PADDING, paddingTop: 10, marginBottom: 10 }}
-      >
+      <View style={{ paddingHorizontal: PADDING, paddingVertical: 16 }}>
         <View
           style={{
             flexDirection: "row",
@@ -357,7 +355,7 @@ export default function KanaPracticeScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           alignItems: "center",
-          paddingVertical: 20,
+          paddingBottom: 24,
         }}
         showsVerticalScrollIndicator={false}
       >
