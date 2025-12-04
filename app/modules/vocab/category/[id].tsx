@@ -7,6 +7,7 @@ import {
   Animated,
   Pressable,
   TextInput,
+  Keyboard,
 } from "react-native";
 import { Text, Surface, TouchableRipple } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -216,7 +217,7 @@ const WordCard = ({
   );
 };
 
-// Header de la categoría
+// Header de la categoría - Estilo japonés dividido
 const CategoryHeader = ({
   title,
   subtitle,
@@ -235,94 +236,196 @@ const CategoryHeader = ({
   onShuffle: () => void;
 }) => {
   const progress = wordCount > 0 ? learnedCount / wordCount : 0;
+  const remaining = wordCount - learnedCount;
 
   return (
     <Surface
       style={{
         marginHorizontal: PADDING,
         marginBottom: 16,
-        borderRadius: 20,
+        borderRadius: 24,
         backgroundColor: colors.bg,
-        padding: 16,
+        overflow: "hidden",
       }}
       elevation={0}
     >
-      {/* Título y progreso */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flex: 1 }}>
+      {/* Contenedor principal dividido */}
+      <View style={{ flexDirection: "row", minHeight: 140 }}>
+        {/* Lado izquierdo - Título con kanji decorativo */}
+        <View
+          style={{
+            flex: 1,
+            padding: 20,
+            justifyContent: "center",
+          }}
+        >
+          {/* Kanji decorativo de fondo */}
+          <Text
+            style={{
+              position: "absolute",
+              right: -10,
+              top: "50%",
+              transform: [{ translateY: -45 }],
+              fontFamily: "NotoSansJP_700Bold",
+              fontSize: 120,
+              color: colors.accent,
+              opacity: 0.08,
+              includeFontPadding: false,
+            }}
+          >
+            {title.charAt(0)}
+          </Text>
+
+          {/* Título */}
           <Text
             style={{
               fontFamily: "NotoSansJP_700Bold",
-              fontSize: 22,
+              fontSize: 32,
               color: colors.text,
+              includeFontPadding: false,
             }}
           >
             {title}
           </Text>
+
+          {/* Subtítulo */}
           <Text
             style={{
               fontFamily: "NotoSansJP_400Regular",
               fontSize: 14,
               color: colors.text,
-              opacity: 0.7,
-              marginTop: 2,
+              opacity: 0.6,
+              marginTop: 4,
             }}
           >
             {subtitle}
           </Text>
+
+          {/* Barra de progreso mini */}
+          <View
+            style={{
+              marginTop: 12,
+              height: 4,
+              width: "80%",
+              backgroundColor: `${colors.accent}20`,
+              borderRadius: 2,
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                width: `${progress * 100}%`,
+                height: "100%",
+                backgroundColor: colors.accent,
+                borderRadius: 2,
+              }}
+            />
+          </View>
         </View>
 
-        <View style={{ alignItems: "flex-end" }}>
+        {/* Separador vertical sutil */}
+        <View
+          style={{
+            width: 1,
+            backgroundColor: colors.accent,
+            opacity: 0.15,
+            marginVertical: 20,
+          }}
+        />
+
+        {/* Lado derecho - Estadísticas apiladas */}
+        <View
+          style={{
+            width: 110,
+            padding: 16,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          {/* Porcentaje grande */}
           <Text
             style={{
               fontFamily: "NotoSansJP_700Bold",
-              fontSize: 28,
+              fontSize: 36,
               color: colors.accent,
+              includeFontPadding: false,
+              lineHeight: 40,
             }}
           >
-            {Math.round(progress * 100)}%
+            {Math.round(progress * 100)}
+            <Text style={{ fontSize: 18 }}>%</Text>
           </Text>
-          <Text
+
+          {/* Aprendidas */}
+          <View
             style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 12,
-              color: colors.text,
-              opacity: 0.6,
+              flexDirection: "row",
+              alignItems: "center",
+              marginTop: 8,
             }}
           >
-            {learnedCount}/{wordCount}
-          </Text>
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: colors.accent,
+                marginRight: 6,
+              }}
+            />
+            <Text
+              style={{
+                fontFamily: "NotoSansJP_500Medium",
+                fontSize: 13,
+                color: colors.text,
+                opacity: 0.8,
+              }}
+            >
+              {learnedCount} 習得
+            </Text>
+          </View>
+
+          {/* Restantes */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginTop: 4,
+            }}
+          >
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: colors.accent,
+                opacity: 0.3,
+                marginRight: 6,
+              }}
+            />
+            <Text
+              style={{
+                fontFamily: "NotoSansJP_400Regular",
+                fontSize: 13,
+                color: colors.text,
+                opacity: 0.5,
+              }}
+            >
+              {remaining} 残り
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Barra de progreso */}
+      {/* Botones de acción */}
       <View
         style={{
-          marginTop: 12,
-          height: 6,
-          backgroundColor: `${colors.accent}30`,
-          borderRadius: 3,
-          overflow: "hidden",
+          flexDirection: "row",
+          paddingHorizontal: 16,
+          paddingBottom: 16,
+          gap: 10,
         }}
       >
-        <View
-          style={{
-            width: `${progress * 100}%`,
-            height: "100%",
-            backgroundColor: colors.accent,
-            borderRadius: 3,
-          }}
-        />
-      </View>
-
-      {/* Botones de acción */}
-      <View style={{ flexDirection: "row", marginTop: 14, gap: 10 }}>
         {/* Botón Practicar */}
         <Pressable
           onPress={onPractice}
@@ -332,7 +435,7 @@ const CategoryHeader = ({
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: colors.accent,
-            height: 48,
+            height: 46,
             borderRadius: 12,
             gap: 8,
           }}
@@ -341,11 +444,11 @@ const CategoryHeader = ({
           <Text
             style={{
               fontFamily: "NotoSansJP_700Bold",
-              fontSize: 14,
+              fontSize: 15,
               color: "#FFFFFF",
             }}
           >
-            練習
+            練習を始める
           </Text>
         </Pressable>
 
@@ -353,15 +456,15 @@ const CategoryHeader = ({
         <Pressable
           onPress={onShuffle}
           style={{
-            width: 48,
-            height: 48,
+            width: 46,
+            height: 46,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: `${colors.accent}20`,
+            backgroundColor: "#FFFFFF",
             borderRadius: 12,
           }}
         >
-          <Shuffle size={20} color={colors.accent} strokeWidth={2} />
+          <Shuffle size={20} color={colors.accent} strokeWidth={2.5} />
         </Pressable>
       </View>
     </Surface>
@@ -426,6 +529,7 @@ export default function CategoryScreen() {
 
   const handleToggleSearch = () => {
     if (isSearchActive) {
+      Keyboard.dismiss();
       setSearchQuery("");
       setIsSearchActive(false);
     } else {

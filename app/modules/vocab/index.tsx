@@ -7,6 +7,7 @@ import {
   Animated,
   Pressable,
   TextInput,
+  Keyboard,
 } from "react-native";
 import { Text, Surface, TouchableRipple } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -474,6 +475,7 @@ export default function VocabScreen() {
 
   const handleToggleSearch = () => {
     if (isSearchActive) {
+      Keyboard.dismiss();
       setSearchQuery("");
       setIsSearchActive(false);
     } else {

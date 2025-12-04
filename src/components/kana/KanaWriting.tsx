@@ -364,27 +364,21 @@ export const KanaWriting = ({
   const buttonCardSize = (size - GAP) / 2;
 
   const getScoreLabel = (score: number): string => {
-    if (score >= 98) return "完璧"; // Kanpeki (Perfecto)
-    if (score >= 95) return "達人"; // Tatsujin (Maestro)
-    if (score >= 90) return "素晴らしい"; // Subarashii (Maravilloso)
-    if (score >= 85) return "見事"; // Migoto (Espléndido)
-    if (score >= 80) return "上手"; // Jouzu (Hábil)
-    if (score >= 70) return "上出来"; // Joudeki (Bien hecho)
-    if (score >= 60) return "良い"; // Yoi (Bueno)
-    if (score >= 50) return "まあまあ"; // Maamaa (Regular)
-    return "修行"; // Shugyou (Entrenamiento)
+    if (score >= 98) return "完璧"; // Kanpeki (Perfecto) - El objetivo final
+    if (score >= 90) return "素晴らしい"; // Subarashii (Maravilloso) - Excelencia
+    if (score >= 80) return "上手"; // Jouzu (Hábil) - Muy bueno
+    if (score >= 70) return "上出来"; // Joudeki (Bien hecho) - Aprobado sólido
+    if (score >= 60) return "良い"; // Yoi (Bueno) - Aprobado justo
+    return "修行"; // Shugyou (Entrenamiento) - Reprobado
   };
 
   const getScoreColor = (score: number): string => {
-    if (score >= 98) return "#FFD700"; // Dorado
-    if (score >= 95) return "#10B981"; // Verde esmeralda
-    if (score >= 90) return "#22C55E"; // Verde
-    if (score >= 85) return "#84CC16"; // Verde lima
-    if (score >= 80) return "#A3E635"; // Lima brillante
-    if (score >= 70) return "#FACC15"; // Amarillo
-    if (score >= 60) return "#FB923C"; // Naranja claro
-    if (score >= 50) return "#F97316"; // Naranja
-    return "#EF4444"; // Rojo
+    if (score >= 98) return "#FFD700"; // Dorado (Oro)
+    if (score >= 90) return "#10B981"; // Verde Esmeralda (Éxito rotundo)
+    if (score >= 80) return "#84CC16"; // Verde Lima (Buen camino)
+    if (score >= 70) return "#FACC15"; // Amarillo (Advertencia positiva)
+    if (score >= 60) return "#FB923C"; // Naranja (Al borde)
+    return "#EF4444"; // Rojo (Fallo)
   };
 
   return (
@@ -627,7 +621,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   buttonCard: {
-    height: 85,
+    height: 90,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
@@ -647,7 +641,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   audioButton: {
-    height: 85,
+    height: 90,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",

@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   buttonCard: {
-    height: 85,
+    height: 90,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   audioButton: {
-    height: 85,
+    height: 90,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     overflow: "hidden",

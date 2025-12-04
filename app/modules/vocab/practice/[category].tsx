@@ -18,7 +18,6 @@ import {
   Volume2,
   Check,
   X as XIcon,
-  Shuffle,
   Eye,
   EyeOff,
 } from "lucide-react-native";
@@ -115,7 +114,7 @@ const ActionButton = ({
   );
 };
 
-// Componente de Flashcard
+// Componente de Flashcard - Rediseñado
 const Flashcard = ({
   word,
   isFlipped,
@@ -132,16 +131,16 @@ const Flashcard = ({
 
   useEffect(() => {
     Animated.spring(flipAnim, {
-      toValue: isFlipped ? 180 : 0,
+      toValue: isFlipped ? 1 : 0,
       useNativeDriver: true,
-      tension: 50,
-      friction: 8,
+      tension: 65,
+      friction: 11,
     }).start();
   }, [isFlipped]);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.98,
+      toValue: 0.97,
       useNativeDriver: true,
       tension: 300,
       friction: 10,
@@ -157,26 +156,28 @@ const Flashcard = ({
     }).start();
   };
 
-  // Interpolaciones para la rotación
+  // Interpolaciones
   const frontInterpolate = flipAnim.interpolate({
-    inputRange: [0, 180],
+    inputRange: [0, 1],
     outputRange: ["0deg", "180deg"],
   });
 
   const backInterpolate = flipAnim.interpolate({
-    inputRange: [0, 180],
+    inputRange: [0, 1],
     outputRange: ["180deg", "360deg"],
   });
 
   const frontOpacity = flipAnim.interpolate({
-    inputRange: [0, 90, 180],
+    inputRange: [0, 0.5, 1],
     outputRange: [1, 0, 0],
   });
 
   const backOpacity = flipAnim.interpolate({
-    inputRange: [0, 90, 180],
+    inputRange: [0, 0.5, 1],
     outputRange: [0, 0, 1],
   });
+
+  const cardWidth = width - PADDING * 2;
 
   return (
     <Pressable
@@ -184,138 +185,191 @@ const Flashcard = ({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={{ width: width - PADDING * 2, height: CARD_HEIGHT }}>
-          {/* Frente de la tarjeta (Japonés) */}
-          <Animated.View
+      <Animated.View
+        style={{
+          width: cardWidth,
+          height: CARD_HEIGHT,
+          transform: [{ scale: scaleAnim }],
+        }}
+      >
+        {/* Cara frontal - Palabra japonesa */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            backfaceVisibility: "hidden",
+            transform: [{ rotateY: frontInterpolate }],
+            opacity: frontOpacity,
+          }}
+        >
+          <Surface
             style={{
-              position: "absolute",
-              width: "100%",
-              height: "100%",
-              backfaceVisibility: "hidden",
-              transform: [{ rotateY: frontInterpolate }],
-              opacity: frontOpacity,
+              flex: 1,
+              borderRadius: 28,
+              backgroundColor: "#FFFFFF",
+              borderWidth: 2,
+              borderColor: colors.bg,
+              overflow: "hidden",
             }}
+            elevation={2}
           >
-            <Surface
+            {/* Decoración de fondo */}
+            <View
+              style={{
+                position: "absolute",
+                right: -20,
+                top: -20,
+                width: 140,
+                height: 140,
+                borderRadius: 70,
+                backgroundColor: colors.accent,
+                opacity: 0.06,
+              }}
+            />
+            <View
+              style={{
+                position: "absolute",
+                left: -30,
+                bottom: -30,
+                width: 100,
+                height: 100,
+                borderRadius: 50,
+                backgroundColor: colors.accent,
+                opacity: 0.04,
+              }}
+            />
+
+            {/* Contenido centrado */}
+            <View
               style={{
                 flex: 1,
-                borderRadius: 24,
-                backgroundColor: "#FFFFFF",
                 justifyContent: "center",
                 alignItems: "center",
-                padding: 24,
-                borderWidth: 2,
-                borderColor: colors.accent,
+                paddingHorizontal: 24,
               }}
-              elevation={2}
             >
-              {/* Kanji/Palabra */}
+              {/* Palabra japonesa */}
               <Text
                 style={{
                   fontFamily: "NotoSansJP_700Bold",
-                  fontSize: 64,
+                  fontSize: 52,
                   color: colors.text,
                   textAlign: "center",
+                  includeFontPadding: false,
                 }}
+                numberOfLines={2}
+                adjustsFontSizeToFit
               >
                 {word.japanese}
               </Text>
 
-              {/* Lectura (si es diferente) */}
+              {/* Lectura */}
               {word.reading && word.reading !== word.japanese && (
                 <Text
                   style={{
                     fontFamily: "NotoSansJP_400Regular",
-                    fontSize: 24,
-                    color: "#9CA3AF",
+                    fontSize: 20,
+                    color: colors.accent,
                     marginTop: 12,
+                    textAlign: "center",
                   }}
                 >
                   {word.reading}
                 </Text>
               )}
+            </View>
+          </Surface>
+        </Animated.View>
 
-              {/* Indicador de tocar */}
-              <View
-                style={{
-                  position: "absolute",
-                  bottom: 20,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  opacity: 0.5,
-                }}
-              >
-                <RotateCcw size={16} color="#9CA3AF" />
-                <Text
-                  style={{
-                    fontFamily: "NotoSansJP_400Regular",
-                    fontSize: 12,
-                    color: "#9CA3AF",
-                    marginLeft: 6,
-                  }}
-                >
-                  Toca para ver significado
-                </Text>
-              </View>
-            </Surface>
-          </Animated.View>
-
-          {/* Reverso de la tarjeta (Significado) */}
-          <Animated.View
+        {/* Cara trasera - Significado */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            backfaceVisibility: "hidden",
+            transform: [{ rotateY: backInterpolate }],
+            opacity: backOpacity,
+          }}
+        >
+          <Surface
             style={{
-              position: "absolute",
-              width: "100%",
-              height: "100%",
-              backfaceVisibility: "hidden",
-              transform: [{ rotateY: backInterpolate }],
-              opacity: backOpacity,
+              flex: 1,
+              borderRadius: 28,
+              backgroundColor: colors.bg,
+              borderWidth: 2,
+              borderColor: colors.accent,
+              overflow: "hidden",
             }}
+            elevation={2}
           >
-            <Surface
+            {/* Contenido */}
+            <View
               style={{
                 flex: 1,
-                borderRadius: 24,
-                backgroundColor: colors.bg,
                 justifyContent: "center",
                 alignItems: "center",
-                padding: 24,
-                borderWidth: 2,
-                borderColor: colors.accent,
+                paddingHorizontal: 24,
               }}
-              elevation={2}
             >
               {/* Significado */}
               <Text
                 style={{
                   fontFamily: "NotoSansJP_700Bold",
-                  fontSize: 32,
+                  fontSize: 28,
                   color: colors.text,
                   textAlign: "center",
+                  includeFontPadding: false,
                 }}
+                numberOfLines={3}
+                adjustsFontSizeToFit
               >
                 {word.meaning}
               </Text>
 
-              {/* Palabra japonesa (pequeña) */}
-              <Text
+              {/* Palabra japonesa pequeña */}
+              <View
                 style={{
-                  fontFamily: "NotoSansJP_400Regular",
-                  fontSize: 18,
-                  color: colors.text,
-                  opacity: 0.7,
-                  marginTop: 12,
+                  marginTop: 20,
+                  paddingTop: 20,
+                  borderTopWidth: 1,
+                  borderTopColor: `${colors.accent}30`,
+                  alignItems: "center",
                 }}
               >
-                {word.japanese} ({word.reading})
-              </Text>
+                <Text
+                  style={{
+                    fontFamily: "NotoSansJP_400Regular",
+                    fontSize: 18,
+                    color: colors.text,
+                    opacity: 0.7,
+                  }}
+                >
+                  {word.japanese}
+                </Text>
+                {word.reading && word.reading !== word.japanese && (
+                  <Text
+                    style={{
+                      fontFamily: "NotoSansJP_400Regular",
+                      fontSize: 14,
+                      color: colors.text,
+                      opacity: 0.5,
+                      marginTop: 4,
+                    }}
+                  >
+                    {word.reading}
+                  </Text>
+                )}
+              </View>
 
-              {/* Ejemplo (si existe) */}
+              {/* Ejemplo */}
               {word.example && (
                 <View
                   style={{
-                    marginTop: 24,
-                    padding: 16,
+                    marginTop: 20,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
                     backgroundColor: "#FFFFFF",
                     borderRadius: 12,
                     width: "100%",
@@ -324,10 +378,11 @@ const Flashcard = ({
                   <Text
                     style={{
                       fontFamily: "NotoSansJP_400Regular",
-                      fontSize: 16,
+                      fontSize: 14,
                       color: "#4B5563",
                       textAlign: "center",
                     }}
+                    numberOfLines={2}
                   >
                     {word.example}
                   </Text>
@@ -335,44 +390,22 @@ const Flashcard = ({
                     <Text
                       style={{
                         fontFamily: "NotoSansJP_400Regular",
-                        fontSize: 14,
+                        fontSize: 12,
                         color: "#9CA3AF",
                         textAlign: "center",
-                        marginTop: 6,
+                        marginTop: 4,
                         fontStyle: "italic",
                       }}
+                      numberOfLines={2}
                     >
                       {word.exampleMeaning}
                     </Text>
                   )}
                 </View>
               )}
-
-              {/* Indicador de tocar */}
-              <View
-                style={{
-                  position: "absolute",
-                  bottom: 20,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  opacity: 0.5,
-                }}
-              >
-                <RotateCcw size={16} color={colors.text} />
-                <Text
-                  style={{
-                    fontFamily: "NotoSansJP_400Regular",
-                    fontSize: 12,
-                    color: colors.text,
-                    marginLeft: 6,
-                  }}
-                >
-                  Toca para ver palabra
-                </Text>
-              </View>
-            </Surface>
-          </Animated.View>
-        </View>
+            </View>
+          </Surface>
+        </Animated.View>
       </Animated.View>
     </Pressable>
   );
@@ -485,68 +518,34 @@ export default function PracticeScreen() {
       <StatusBar style="dark" />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
+      {/* Header simplificado */}
       <View
         style={{
-          flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
           paddingHorizontal: PADDING,
-          paddingTop: 10,
+          paddingTop: 16,
           paddingBottom: 8,
         }}
       >
-        {/* Botón atrás */}
-        <Pressable
-          onPress={handleBack}
+        <Text
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            backgroundColor: "#F3F4F6",
-            justifyContent: "center",
-            alignItems: "center",
+            fontFamily: "NotoSansJP_700Bold",
+            fontSize: 20,
+            color: colors.text,
           }}
         >
-          <ChevronLeft size={24} color="#374151" strokeWidth={2} />
-        </Pressable>
-
-        {/* Título */}
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 18,
-              color: colors.text,
-            }}
-          >
-            {categoryData?.titleJp || "Práctica"}
-          </Text>
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 12,
-              color: "#9CA3AF",
-            }}
-          >
-            {currentIndex + 1} / {words.length}
-          </Text>
-        </View>
-
-        {/* Botón shuffle */}
-        <Pressable
-          onPress={handleShuffle}
+          {categoryData?.titleJp || "練習"}
+        </Text>
+        <Text
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            backgroundColor: colors.bg,
-            justifyContent: "center",
-            alignItems: "center",
+            fontFamily: "NotoSansJP_400Regular",
+            fontSize: 13,
+            color: "#9CA3AF",
+            marginTop: 2,
           }}
         >
-          <Shuffle size={20} color={colors.accent} strokeWidth={2} />
-        </Pressable>
+          {currentIndex + 1} / {words.length}
+        </Text>
       </View>
 
       {/* Barra de progreso */}

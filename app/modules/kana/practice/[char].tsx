@@ -271,7 +271,9 @@ export default function KanaPracticeScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Selector de modo */}
-      <View style={{ paddingHorizontal: PADDING, paddingVertical: 16 }}>
+      <View
+        style={{ paddingHorizontal: PADDING, paddingTop: 10, marginBottom: 10 }}
+      >
         <View
           style={{
             flexDirection: "row",
