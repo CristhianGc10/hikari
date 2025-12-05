@@ -58,6 +58,45 @@ const CATEGORY_COLORS: Record<
 
 const PADDING = 20;
 
+// Sistema de border radius dinámico basado en contenido
+const getCardBorderRadius = (
+  word: VocabWord
+): {
+  topLeft: number;
+  topRight: number;
+  bottomLeft: number;
+  bottomRight: number;
+} => {
+  // Factores basados en la palabra
+  const jpLength = word.japanese.length;
+  const readingLength = word.reading?.length || 0;
+  const meaningLength = word.meaning.length;
+  const hasExample = !!word.example;
+
+  // Hash simple del ID para variación consistente
+  const idSum = word.id
+    .split("")
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+  // Base radius entre 12-24px
+  const baseMin = 12;
+  const baseMax = 24;
+
+  // Calcular cada esquina con variación
+  const topLeft = baseMin + (idSum % 7) * 2;
+  const topRight =
+    baseMin + ((idSum + jpLength) % 6) * 2 + (hasExample ? 2 : 0);
+  const bottomLeft = baseMin + ((idSum + readingLength) % 5) * 2;
+  const bottomRight = baseMin + ((idSum + meaningLength) % 8) * 2;
+
+  return {
+    topLeft: Math.min(topLeft, baseMax),
+    topRight: Math.min(topRight, baseMax),
+    bottomLeft: Math.min(bottomLeft, baseMax),
+    bottomRight: Math.min(bottomRight, baseMax),
+  };
+};
+
 // Componente de tarjeta de palabra
 const WordCard = ({
   word,
@@ -96,10 +135,13 @@ const WordCard = ({
         style={{
           marginHorizontal: PADDING,
           marginBottom: 10,
-          borderRadius: 16,
+          borderTopLeftRadius: getCardBorderRadius(word).topLeft,
+          borderTopRightRadius: getCardBorderRadius(word).topRight,
+          borderBottomLeftRadius: getCardBorderRadius(word).bottomLeft,
+          borderBottomRightRadius: getCardBorderRadius(word).bottomRight,
           backgroundColor: "#FFFFFF",
-          borderWidth: 1,
-          borderColor: isLearned ? colors.accent : "#F3F4F6",
+          borderWidth: isLearned ? 1.5 : 1,
+          borderColor: isLearned ? colors.accent : "#F0F0F0",
         }}
         elevation={0}
       >
@@ -108,7 +150,13 @@ const WordCard = ({
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           rippleColor={`${colors.accent}20`}
-          style={{ padding: 16 }}
+          style={{
+            padding: 16,
+            borderTopLeftRadius: getCardBorderRadius(word).topLeft,
+            borderTopRightRadius: getCardBorderRadius(word).topRight,
+            borderBottomLeftRadius: getCardBorderRadius(word).bottomLeft,
+            borderBottomRightRadius: getCardBorderRadius(word).bottomRight,
+          }}
         >
           <View>
             {/* Fila principal */}

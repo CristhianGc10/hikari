@@ -214,10 +214,51 @@ const CATEGORIES: VocabCategory[] = [
 ];
 
 // Grid config
+// Grid config
 const PADDING = 20;
 const GAP = 12;
 const NUM_COLUMNS = 2;
 const CARD_WIDTH = (width - PADDING * 2 - GAP) / NUM_COLUMNS;
+
+// Border radius por categoría - diseño orgánico
+const CATEGORY_BORDER_RADIUS: Record<
+  string,
+  {
+    topLeft: number;
+    topRight: number;
+    bottomLeft: number;
+    bottomRight: number;
+  }
+> = {
+  people: { topLeft: 20, topRight: 12, bottomLeft: 14, bottomRight: 22 },
+  food: { topLeft: 14, topRight: 20, bottomLeft: 18, bottomRight: 12 },
+  clothes: { topLeft: 18, topRight: 14, bottomLeft: 12, bottomRight: 20 },
+  house: { topLeft: 12, topRight: 22, bottomLeft: 20, bottomRight: 14 },
+  vehicle: { topLeft: 22, topRight: 16, bottomLeft: 14, bottomRight: 18 },
+  tools: { topLeft: 16, topRight: 12, bottomLeft: 22, bottomRight: 16 },
+  date: { topLeft: 14, topRight: 18, bottomLeft: 16, bottomRight: 22 },
+  time: { topLeft: 20, topRight: 14, bottomLeft: 18, bottomRight: 14 },
+  location: { topLeft: 12, topRight: 20, bottomLeft: 14, bottomRight: 18 },
+  facility: { topLeft: 18, topRight: 22, bottomLeft: 12, bottomRight: 16 },
+  body: { topLeft: 16, topRight: 14, bottomLeft: 20, bottomRight: 12 },
+  nature: { topLeft: 22, topRight: 18, bottomLeft: 16, bottomRight: 20 },
+  condition: { topLeft: 14, topRight: 16, bottomLeft: 22, bottomRight: 14 },
+  work: { topLeft: 18, topRight: 20, bottomLeft: 14, bottomRight: 18 },
+  numbers: { topLeft: 20, topRight: 12, bottomLeft: 18, bottomRight: 22 },
+  adjectives: { topLeft: 12, topRight: 18, bottomLeft: 20, bottomRight: 16 },
+  verbs: { topLeft: 16, topRight: 22, bottomLeft: 12, bottomRight: 20 },
+};
+
+const getCategoryRadius = (categoryId: string) => {
+  return (
+    CATEGORY_BORDER_RADIUS[categoryId] || {
+      topLeft: 16,
+      topRight: 16,
+      bottomLeft: 16,
+      bottomRight: 16,
+    }
+  );
+};
 
 // Componente de tarjeta de categoría
 const CategoryCard = ({
@@ -234,7 +275,10 @@ const CategoryCard = ({
     <Surface
       style={{
         width: CARD_WIDTH,
-        borderRadius: 16,
+        borderTopLeftRadius: getCategoryRadius(category.id).topLeft,
+        borderTopRightRadius: getCategoryRadius(category.id).topRight,
+        borderBottomLeftRadius: getCategoryRadius(category.id).bottomLeft,
+        borderBottomRightRadius: getCategoryRadius(category.id).bottomRight,
         overflow: "hidden",
         backgroundColor: colors.bg,
       }}
@@ -243,7 +287,13 @@ const CategoryCard = ({
       <TouchableRipple
         onPress={onPress}
         rippleColor={`${colors.icon}20`}
-        style={{ padding: 16 }}
+        style={{
+          padding: 16,
+          borderTopLeftRadius: getCategoryRadius(category.id).topLeft,
+          borderTopRightRadius: getCategoryRadius(category.id).topRight,
+          borderBottomLeftRadius: getCategoryRadius(category.id).bottomLeft,
+          borderBottomRightRadius: getCategoryRadius(category.id).bottomRight,
+        }}
       >
         <View>
           {/* Icono y título japonés */}
@@ -258,7 +308,10 @@ const CategoryCard = ({
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: 10,
+                borderRadius: Math.min(
+                  getCategoryRadius(category.id).topLeft,
+                  12
+                ),
                 backgroundColor: `${colors.icon}20`,
                 justifyContent: "center",
                 alignItems: "center",
