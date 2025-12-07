@@ -1,14 +1,15 @@
-// src/components/audio/AudioWaveformPlayer.tsx
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Pressable, StyleSheet } from "react-native";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withTiming,
   withSpring,
-  runOnJS,
+  withTiming,
+  cancelAnimation,
 } from "react-native-reanimated";
+import Svg, { Rect } from "react-native-svg";
+import { Play, Pause } from "lucide-react-native";
 
 interface AudioWaveformPlayerProps {
   source: number | { uri: string };
@@ -16,218 +17,307 @@ interface AudioWaveformPlayerProps {
   width?: number;
   height?: number;
   barCount?: number;
+  containerPadding?: number;
 }
 
-// Componente de barra individual
-const WaveBar = ({
-  index,
-  height,
-  maxHeight,
-  barWidth,
-  gap,
-  color,
-  isPlaying,
-  progress,
-  totalBars,
-}: {
-  index: number;
-  height: number;
-  maxHeight: number;
-  barWidth: number;
-  gap: number;
-  color: string;
-  isPlaying: boolean;
-  progress: number;
-  totalBars: number;
-}) => {
-  const animatedHeight = useSharedValue(4);
-  const minHeight = 4;
-
-  useEffect(() => {
-    if (isPlaying) {
-      // Calcular altura basada en posición y progreso
-      const barPosition = index / totalBars;
-      const distanceFromProgress = Math.abs(barPosition - progress);
-
-      // Barras cerca del progreso son más altas
-      const proximityFactor = Math.max(0, 1 - distanceFromProgress * 3);
-
-      // Patrón de onda basado en índice y tiempo
-      const wavePattern =
-        Math.sin(index * 0.5 + progress * 20) * 0.3 +
-        Math.cos(index * 0.3 + progress * 15) * 0.2 +
-        Math.sin(index * 0.8 + progress * 25) * 0.15;
-
-      const normalizedHeight = 0.3 + proximityFactor * 0.5 + wavePattern * 0.3;
-      const targetHeight =
-        minHeight +
-        Math.max(0, Math.min(1, normalizedHeight)) * (maxHeight - minHeight);
-
-      animatedHeight.value = withSpring(targetHeight, {
-        damping: 12,
-        stiffness: 180,
-        mass: 0.3,
-      });
-    } else {
-      // Estado de reposo con variación sutil
-      const restHeight = minHeight + Math.sin(index * 0.5) * 2 + 2;
-      animatedHeight.value = withTiming(restHeight, { duration: 400 });
-    }
-  }, [isPlaying, progress, index]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    height: animatedHeight.value,
-  }));
-
-  const x = index * (barWidth + gap);
-  const isPassed = index / totalBars < progress;
-
-  return (
-    <Animated.View
-      style={[
-        styles.bar,
-        {
-          left: x,
-          width: barWidth,
-          backgroundColor: color,
-          opacity: isPlaying ? (isPassed ? 0.9 : 0.5) : 0.35,
-          borderRadius: barWidth / 2,
-        },
-        animatedStyle,
-      ]}
-    />
-  );
+const getSourceHash = (source: number | { uri: string }): number => {
+  if (typeof source === "number") return source;
+  const str = source.uri;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
 };
+
+const generateWaveformPattern = (count: number, seed: number): number[] => {
+  const pattern: number[] = [];
+  const s1 = (seed % 7) + 2;
+  const s2 = (seed % 11) + 5;
+  const s3 = (seed % 13) + 8;
+  const p1 = ((seed % 100) / 100) * 0.3 + 0.1;
+  const p2 = ((seed % 77) / 100) * 0.3 + 0.35;
+  const p3 = ((seed % 53) / 100) * 0.3 + 0.6;
+  const p4 = ((seed % 31) / 100) * 0.2 + 0.8;
+
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    const wave1 = Math.sin(t * Math.PI * s1) * 0.18;
+    const wave2 = Math.sin(t * Math.PI * s2 + seed * 0.1) * 0.14;
+    const wave3 = Math.cos(t * Math.PI * s3) * 0.1;
+    const peak1 = Math.exp(-Math.pow((t - p1) * 5.5, 2)) * 0.45;
+    const peak2 = Math.exp(-Math.pow((t - p2) * 4.5, 2)) * 0.5;
+    const peak3 = Math.exp(-Math.pow((t - p3) * 5, 2)) * 0.4;
+    const peak4 = Math.exp(-Math.pow((t - p4) * 6, 2)) * 0.3;
+    const noise = Math.sin(i * 17.31 + seed * 0.7) * 0.07;
+    const noise2 = Math.cos(i * 23.17 + seed * 0.3) * 0.05;
+
+    const value =
+      0.22 +
+      wave1 +
+      wave2 +
+      wave3 +
+      peak1 +
+      peak2 +
+      peak3 +
+      peak4 +
+      noise +
+      noise2;
+    pattern.push(Math.max(0.1, Math.min(1, value)));
+  }
+  return pattern;
+};
+
+const WaveformVisual = React.memo(
+  ({
+    pattern,
+    width,
+    height,
+    barWidth,
+    barGap,
+    color,
+  }: {
+    pattern: number[];
+    width: number;
+    height: number;
+    barWidth: number;
+    barGap: number;
+    color: string;
+  }) => (
+    <Svg width={width} height={height}>
+      {pattern.map((amplitude, index) => {
+        const barHeight = Math.max(4, amplitude * height * 0.9);
+        const y = (height - barHeight) / 2;
+        const x = index * (barWidth + barGap);
+        return (
+          <Rect
+            key={index}
+            x={x}
+            y={y}
+            width={barWidth}
+            height={barHeight}
+            rx={barWidth / 2}
+            ry={barWidth / 2}
+            fill={color}
+          />
+        );
+      })}
+    </Svg>
+  )
+);
 
 const AudioWaveformPlayer: React.FC<AudioWaveformPlayerProps> = ({
   source,
   color,
-  width = 280,
-  height = 70,
-  barCount = 30,
+  width = 320,
+  height = 52,
+  barCount = 45,
+  containerPadding = 2,
 }) => {
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
-  const progressRef = useRef(0);
 
-  // Calcular progreso
-  const currentProgress =
-    status.duration && status.duration > 0
-      ? (status.currentTime || 0) / status.duration
-      : 0;
-
-  progressRef.current = currentProgress;
-
-  // Dimensiones
-  const gap = 3;
-  const barWidth = (width - 16 - gap * (barCount - 1)) / barCount;
-  const maxBarHeight = height - 20;
+  const lastTimestamp = useRef<number>(0);
+  const animationFrameId = useRef<number | null>(null);
 
   const progress = useSharedValue(0);
+  const buttonScale = useSharedValue(1);
+
+  const buttonSize = 44;
+  const gapBetweenButtonAndWave = 14;
+  const availableWaveformWidth =
+    width - containerPadding * 2 - buttonSize - gapBetweenButtonAndWave;
+  const barGap = 2.5;
+  const totalGapSpace = (barCount - 1) * barGap;
+  const availableSpaceForBars = availableWaveformWidth - totalGapSpace;
+  const barWidth = Math.max(1, availableSpaceForBars / barCount);
+  const exactWaveformWidth = barCount * barWidth + (barCount - 1) * barGap;
+
+  const sourceHash = useMemo(() => getSourceHash(source), [source]);
+  const waveformPattern = useMemo(
+    () => generateWaveformPattern(barCount, sourceHash),
+    [barCount, sourceHash]
+  );
+
+  const animate = useCallback(() => {
+    if (!status.playing || !status.duration) {
+      animationFrameId.current = null;
+      return;
+    }
+
+    const now = Date.now();
+    const dt = (now - lastTimestamp.current) / 1000;
+    lastTimestamp.current = now;
+
+    const increment = dt / status.duration;
+    const nextValue = progress.value + increment;
+
+    if (nextValue >= progress.value) {
+      progress.value = Math.min(1, nextValue);
+    }
+
+    if (nextValue < 1) {
+      animationFrameId.current = requestAnimationFrame(animate);
+    }
+  }, [status.playing, status.duration]);
 
   useEffect(() => {
-    progress.value = withTiming(currentProgress, { duration: 50 });
-  }, [currentProgress]);
+    if (!status.isLoaded || !status.duration) return;
 
-  const handlePress = () => {
+    const actual = status.currentTime / status.duration;
+    const visual = progress.value;
+    const diff = Math.abs(actual - visual);
+
+    if (!status.playing) {
+      progress.value = actual;
+    } else {
+      if (diff > 0.2) {
+        progress.value = actual;
+        lastTimestamp.current = Date.now();
+      }
+    }
+  }, [status.currentTime, status.duration, status.playing]);
+
+  useEffect(() => {
+    if (status.playing) {
+      lastTimestamp.current = Date.now();
+      if (animationFrameId.current)
+        cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = requestAnimationFrame(animate);
+    } else {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+    }
+    return () => {
+      if (animationFrameId.current)
+        cancelAnimationFrame(animationFrameId.current);
+    };
+  }, [status.playing, animate]);
+
+  useEffect(() => {
+    if (!status.playing && status.currentTime === 0) {
+      progress.value = withTiming(0, { duration: 150 });
+    }
+  }, [status.playing, status.currentTime]);
+
+  const togglePlay = () => {
+    buttonScale.value = withSpring(0.85, { damping: 12 }, () => {
+      buttonScale.value = withSpring(1);
+    });
+
     if (status.playing) {
       player.pause();
     } else {
-      if (status.currentTime >= (status.duration || 0) - 0.1) {
+      if (status.duration && status.currentTime >= status.duration - 0.1) {
         player.seekTo(0);
+        progress.value = 0;
+        setTimeout(() => player.play(), 50);
+      } else {
+        player.play();
       }
-      player.play();
     }
   };
 
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progress.value * 100}%`,
+  const buttonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: buttonScale.value }],
+  }));
+
+  const maskStyle = useAnimatedStyle(() => ({
+    width: progress.value * exactWaveformWidth,
   }));
 
   return (
-    <Pressable onPress={handlePress} style={styles.pressable}>
-      <View
-        style={[
-          styles.container,
-          {
-            width,
-            height,
-            backgroundColor: `${color}10`,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: `${color}20`,
-          },
-        ]}
-      >
-        {/* Barras del waveform */}
-        <View style={styles.barsContainer}>
-          {Array.from({ length: barCount }).map((_, index) => (
-            <WaveBar
-              key={index}
-              index={index}
-              height={height}
-              maxHeight={maxBarHeight}
-              barWidth={barWidth}
-              gap={gap}
-              color={color}
-              isPlaying={status.playing}
-              progress={currentProgress}
-              totalBars={barCount}
-            />
-          ))}
-        </View>
-
-        {/* Barra de progreso */}
-        <View
-          style={[styles.progressContainer, { backgroundColor: `${color}20` }]}
+    <View
+      style={[
+        styles.container,
+        {
+          width: width,
+          paddingHorizontal: containerPadding,
+          height: height + 10,
+        },
+      ]}
+    >
+      <Pressable onPress={togglePlay} hitSlop={10}>
+        <Animated.View
+          style={[
+            styles.circleButton,
+            {
+              width: buttonSize,
+              height: buttonSize,
+              borderRadius: buttonSize / 2,
+              borderColor: color,
+              backgroundColor: status.playing ? color : "transparent",
+            },
+            buttonStyle,
+          ]}
         >
-          <Animated.View
-            style={[
-              styles.progressBar,
-              { backgroundColor: color },
-              progressStyle,
-            ]}
-          />
-        </View>
+          {status.playing ? (
+            <Pause size={18} fill="#FFF" color="#FFF" />
+          ) : (
+            <Play
+              size={18}
+              fill={color}
+              color={color}
+              style={{ marginLeft: 2 }}
+            />
+          )}
+        </Animated.View>
+      </Pressable>
 
-        {/* Indicador de estado */}
-        <View style={styles.statusContainer}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: status.playing ? "#FFFFFF" : `${color}60` },
-            ]}
-          />
+      <Pressable
+        onPress={togglePlay}
+        style={{ marginLeft: gapBetweenButtonAndWave }}
+        hitSlop={5}
+      >
+        <View style={{ width: exactWaveformWidth, height: height }}>
+          <View style={{ opacity: 0.3 }}>
+            <WaveformVisual
+              pattern={waveformPattern}
+              width={exactWaveformWidth}
+              height={height}
+              barWidth={barWidth}
+              barGap={barGap}
+              color={color}
+            />
+          </View>
+
+          <Animated.View style={[styles.mask, maskStyle]}>
+            <WaveformVisual
+              pattern={waveformPattern}
+              width={exactWaveformWidth}
+              height={height}
+              barWidth={barWidth}
+              barGap={barGap}
+              color={color}
+            />
+          </Animated.View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  pressable: { alignItems: "center" },
-  container: { overflow: "hidden", justifyContent: "center" },
-  barsContainer: {
-    flex: 1,
+  container: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    position: "relative",
+    justifyContent: "flex-start",
   },
-  bar: { position: "absolute" },
-  progressContainer: {
+  circleButton: {
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+  },
+  mask: {
     position: "absolute",
-    bottom: 0,
     left: 0,
-    right: 0,
-    height: 3,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    top: 0,
+    height: "100%",
     overflow: "hidden",
+    zIndex: 10,
   },
-  progressBar: { height: "100%" },
-  statusContainer: { position: "absolute", top: 8, right: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
 });
 
 export default AudioWaveformPlayer;
