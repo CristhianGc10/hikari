@@ -22,12 +22,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.anonymous.hikari"
     },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-asset",
+      "expo-dev-client",
       [
         "expo-audio",
         {
@@ -35,6 +43,9 @@
         }
       ]
     ],
+    "developmentClient": {
+      "silentLaunch": false
+    },
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true

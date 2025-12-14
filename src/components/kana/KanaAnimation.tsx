@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   },
   svgCard: {
     borderRadius: 32,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     overflow: "hidden",
   },
   svgInner: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   buttonCard: {
     height: 90,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     overflow: "hidden",
   },
   buttonPressable: {
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   audioButton: {
     height: 90,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     overflow: "hidden",
   },
   audioButtonPressable: {

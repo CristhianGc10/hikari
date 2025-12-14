@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npx expo start:*)",
+      "Bash(dir \"c:\\Proyectos\\hikari\\app\\modules\" /B)",
+      "Bash(dir:*)",
+      "Bash(npm install:*)",
+      "Bash(npx expo prebuild:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

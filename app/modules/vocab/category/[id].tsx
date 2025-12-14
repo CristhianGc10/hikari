@@ -1,789 +1,467 @@
-// app/modules/vocab/category/[id].tsx
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import {
-  View,
-  ScrollView,
-  Dimensions,
-  Animated,
-  Pressable,
-  TextInput,
-  Keyboard,
-} from "react-native";
-import { Text, Surface, TouchableRipple } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import {
-  Volume2,
-  BookmarkPlus,
-  Check,
-  Search,
-  X,
-  Shuffle,
-  GraduationCap,
-} from "lucide-react-native";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+} from 'react-native-reanimated';
+import { headerEnter, listItemEnter, pressScale, releaseScale } from '@/src/core/animations';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Text } from 'react-native-paper';
+import { Shuffle, GraduationCap, Volume2 } from 'lucide-react-native';
 
 // Importar datos de vocabulario
-import { VOCAB_DATA, VocabWord, getCategoryById } from "@/src/data/vocabData";
+import { VOCAB_DATA, VocabWord, getCategoryById } from '@/src/data/vocabData';
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 
-// Color base del módulo (N5)
-const THEME_COLOR = "#F5A238";
-const THEME_LIGHT = "#FEF7ED";
+// ============================================================================
+// COLORES Y TOKENS
+// ============================================================================
+
+const colors = {
+    bg: '#151621',
+    surface: '#1E2030',
+    surfaceLight: '#262940',
+    text: {
+        primary: '#FFFFFF',
+        secondary: '#8F92A8',
+        tertiary: '#5D6080',
+    },
+};
+
+const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, screen: 20 };
+const radius = { sm: 10, md: 14, lg: 18, xl: 28 };
+
+// Altura fija para todas las tarjetas de palabras - Ajustada para mejor espaciado
+const WORD_CARD_HEIGHT = 76;
 
 // Colores por categoría
-const CATEGORY_COLORS: Record<
-  string,
-  { bg: string; text: string; accent: string }
-> = {
-  people: { bg: "#FFF0F5", text: "#DB2777", accent: "#EC4899" },
-  food: { bg: "#FEF3E2", text: "#EA580C", accent: "#F97316" },
-  clothes: { bg: "#F0F9FF", text: "#0369A1", accent: "#0EA5E9" },
-  house: { bg: "#F5F3FF", text: "#7C3AED", accent: "#8B5CF6" },
-  vehicle: { bg: "#ECFDF5", text: "#059669", accent: "#10B981" },
-  tools: { bg: "#FEF9C3", text: "#CA8A04", accent: "#EAB308" },
-  date: { bg: "#FCE7F3", text: "#BE185D", accent: "#EC4899" },
-  time: { bg: "#E0E7FF", text: "#4338CA", accent: "#6366F1" },
-  location: { bg: "#CCFBF1", text: "#0D9488", accent: "#14B8A6" },
-  facility: { bg: "#FEE2E2", text: "#DC2626", accent: "#EF4444" },
-  body: { bg: "#FFE4E6", text: "#E11D48", accent: "#F43F5E" },
-  nature: { bg: "#D1FAE5", text: "#047857", accent: "#10B981" },
-  condition: { bg: "#E0F2FE", text: "#0284C7", accent: "#0EA5E9" },
-  work: { bg: "#F3E8FF", text: "#9333EA", accent: "#A855F7" },
-  numbers: { bg: "#FDF4FF", text: "#A21CAF", accent: "#D946EF" },
-  adjectives: { bg: "#FEF3C7", text: "#D97706", accent: "#F59E0B" },
-  verbs: { bg: "#DBEAFE", text: "#2563EB", accent: "#3B82F6" },
+const CATEGORY_COLORS: Record<string, string> = {
+    people: '#EC4899',
+    food: '#F97316',
+    clothes: '#0EA5E9',
+    house: '#8B5CF6',
+    vehicle: '#10B981',
+    tools: '#EAB308',
+    date: '#EC4899',
+    time: '#6366F1',
+    location: '#14B8A6',
+    facility: '#EF4444',
+    body: '#F43F5E',
+    nature: '#10B981',
+    condition: '#0EA5E9',
+    work: '#A855F7',
+    numbers: '#D946EF',
 };
 
-const PADDING = 20;
+// ============================================================================
+// COMPONENTES
+// ============================================================================
 
-// Sistema de border radius dinámico basado en contenido
-const getCardBorderRadius = (
-  word: VocabWord
-): {
-  topLeft: number;
-  topRight: number;
-  bottomLeft: number;
-  bottomRight: number;
-} => {
-  // Factores basados en la palabra
-  const jpLength = word.japanese.length;
-  const readingLength = word.reading?.length || 0;
-  const meaningLength = word.meaning.length;
-  const hasExample = !!word.example;
-
-  // Hash simple del ID para variación consistente
-  const idSum = word.id
-    .split("")
-    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
-
-  // Base radius entre 12-24px
-  const baseMin = 12;
-  const baseMax = 24;
-
-  // Calcular cada esquina con variación
-  const topLeft = baseMin + (idSum % 7) * 2;
-  const topRight =
-    baseMin + ((idSum + jpLength) % 6) * 2 + (hasExample ? 2 : 0);
-  const bottomLeft = baseMin + ((idSum + readingLength) % 5) * 2;
-  const bottomRight = baseMin + ((idSum + meaningLength) % 8) * 2;
-
-  return {
-    topLeft: Math.min(topLeft, baseMax),
-    topRight: Math.min(topRight, baseMax),
-    bottomLeft: Math.min(bottomLeft, baseMax),
-    bottomRight: Math.min(bottomRight, baseMax),
-  };
-};
-
-// Componente de tarjeta de palabra
-const WordCard = ({
-  word,
-  colors,
-  onPress,
-  isLearned,
-}: {
-  word: VocabWord;
-  colors: { bg: string; text: string; accent: string };
-  onPress: () => void;
-  isLearned: boolean;
-}) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.98,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 10,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 10,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <Surface
-        style={{
-          marginHorizontal: PADDING,
-          marginBottom: 10,
-          borderTopLeftRadius: getCardBorderRadius(word).topLeft,
-          borderTopRightRadius: getCardBorderRadius(word).topRight,
-          borderBottomLeftRadius: getCardBorderRadius(word).bottomLeft,
-          borderBottomRightRadius: getCardBorderRadius(word).bottomRight,
-          backgroundColor: "#FFFFFF",
-          borderWidth: isLearned ? 1.5 : 1,
-          borderColor: isLearned ? colors.accent : "#F0F0F0",
-        }}
-        elevation={0}
-      >
-        <TouchableRipple
-          onPress={onPress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          rippleColor={`${colors.accent}20`}
-          style={{
-            padding: 16,
-            borderTopLeftRadius: getCardBorderRadius(word).topLeft,
-            borderTopRightRadius: getCardBorderRadius(word).topRight,
-            borderBottomLeftRadius: getCardBorderRadius(word).bottomLeft,
-            borderBottomRightRadius: getCardBorderRadius(word).bottomRight,
-          }}
-        >
-          <View>
-            {/* Fila principal */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                {/* Palabra japonesa */}
-                <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-                  <Text
-                    style={{
-                      fontFamily: "NotoSansJP_700Bold",
-                      fontSize: 22,
-                      color: colors.text,
-                    }}
-                  >
-                    {word.japanese}
-                  </Text>
-                  {word.reading && word.reading !== word.japanese && (
-                    <Text
-                      style={{
-                        fontFamily: "NotoSansJP_400Regular",
-                        fontSize: 14,
-                        color: "#9CA3AF",
-                        marginLeft: 8,
-                      }}
-                    >
-                      {word.reading}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Significado */}
-                <Text
-                  style={{
-                    fontFamily: "NotoSansJP_400Regular",
-                    fontSize: 15,
-                    color: "#4B5563",
-                    marginTop: 4,
-                  }}
-                >
-                  {word.meaning}
-                </Text>
-
-                {/* Ejemplo (si existe) */}
-                {word.example && (
-                  <View
-                    style={{
-                      marginTop: 10,
-                      paddingTop: 10,
-                      borderTopWidth: 1,
-                      borderTopColor: "#F3F4F6",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: "NotoSansJP_400Regular",
-                        fontSize: 13,
-                        color: "#6B7280",
-                      }}
-                    >
-                      {word.example}
-                    </Text>
-                    {word.exampleMeaning && (
-                      <Text
-                        style={{
-                          fontFamily: "NotoSansJP_400Regular",
-                          fontSize: 12,
-                          color: "#9CA3AF",
-                          marginTop: 2,
-                          fontStyle: "italic",
-                        }}
-                      >
-                        {word.exampleMeaning}
-                      </Text>
-                    )}
-                  </View>
-                )}
-              </View>
-
-              {/* Indicador de aprendido */}
-              {isLearned && (
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: colors.accent,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    marginLeft: 12,
-                  }}
-                >
-                  <Check size={16} color="#FFFFFF" strokeWidth={3} />
-                </View>
-              )}
-            </View>
-          </View>
-        </TouchableRipple>
-      </Surface>
-    </Animated.View>
-  );
-};
-
-// Header de la categoría - Estilo japonés dividido
 const CategoryHeader = ({
-  title,
-  subtitle,
-  wordCount,
-  learnedCount,
-  colors,
-  onPractice,
-  onShuffle,
+    title,
+    subtitle,
+    wordCount,
+    learnedCount,
+    categoryColor,
+    onPractice,
+    onShuffle,
 }: {
-  title: string;
-  subtitle: string;
-  wordCount: number;
-  learnedCount: number;
-  colors: { bg: string; text: string; accent: string };
-  onPractice: () => void;
-  onShuffle: () => void;
+    title: string;
+    subtitle: string;
+    wordCount: number;
+    learnedCount: number;
+    categoryColor: string;
+    onPractice: () => void;
+    onShuffle: () => void;
 }) => {
-  const progress = wordCount > 0 ? learnedCount / wordCount : 0;
-  const remaining = wordCount - learnedCount;
+    const progress = wordCount > 0 ? learnedCount / wordCount : 0;
+    const remaining = wordCount - learnedCount;
 
-  return (
-    <Surface
-      style={{
-        marginHorizontal: PADDING,
-        marginBottom: 16,
-        borderRadius: 24,
-        backgroundColor: colors.bg,
-        overflow: "hidden",
-      }}
-      elevation={0}
-    >
-      {/* Contenedor principal dividido */}
-      <View style={{ flexDirection: "row", minHeight: 140 }}>
-        {/* Lado izquierdo - Título con kanji decorativo */}
-        <View
-          style={{
-            flex: 1,
-            padding: 20,
-            justifyContent: "center",
-          }}
-        >
-          {/* Kanji decorativo de fondo */}
-          <Text
-            style={{
-              position: "absolute",
-              right: -10,
-              top: "50%",
-              transform: [{ translateY: -45 }],
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 120,
-              color: colors.accent,
-              opacity: 0.08,
-              includeFontPadding: false,
-            }}
-          >
-            {title.charAt(0)}
-          </Text>
+    return (
+        <Animated.View entering={headerEnter()} style={styles.categoryHeader}>
+            <View style={styles.headerContent}>
+                {/* Izquierda - Título */}
+                <View style={styles.headerLeft}>
+                    <Text style={[styles.headerTitle, { color: categoryColor }]}>{title}</Text>
+                    <Text style={styles.headerSubtitle}>{subtitle}</Text>
 
-          {/* Título */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 32,
-              color: colors.text,
-              includeFontPadding: false,
-            }}
-          >
-            {title}
-          </Text>
+                    {/* Mini barra de progreso */}
+                    <View style={styles.headerProgressBar}>
+                        <View
+                            style={[
+                                styles.headerProgressFill,
+                                {
+                                    width: `${progress * 100}%`,
+                                    backgroundColor: categoryColor,
+                                },
+                            ]}
+                        />
+                    </View>
+                </View>
 
-          {/* Subtítulo */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 14,
-              color: colors.text,
-              opacity: 0.6,
-              marginTop: 4,
-            }}
-          >
-            {subtitle}
-          </Text>
+                {/* Derecha - Estadísticas */}
+                <View style={styles.headerRight}>
+                    <Text style={[styles.headerPercentage, { color: categoryColor }]}>
+                        {Math.round(progress * 100)}
+                        <Text style={styles.headerPercentageSymbol}>%</Text>
+                    </Text>
 
-          {/* Barra de progreso mini */}
-          <View
-            style={{
-              marginTop: 12,
-              height: 4,
-              width: "80%",
-              backgroundColor: `${colors.accent}20`,
-              borderRadius: 2,
-              overflow: "hidden",
-            }}
-          >
-            <View
-              style={{
-                width: `${progress * 100}%`,
-                height: "100%",
-                backgroundColor: colors.accent,
-                borderRadius: 2,
-              }}
-            />
-          </View>
-        </View>
+                    <View style={styles.statRow}>
+                        <Text style={styles.statText}>{learnedCount}</Text>
+                        <Text style={styles.statLabel}>習得</Text>
+                    </View>
 
-        {/* Separador vertical sutil */}
-        <View
-          style={{
-            width: 1,
-            backgroundColor: colors.accent,
-            opacity: 0.15,
-            marginVertical: 20,
-          }}
-        />
+                    <View style={styles.statRow}>
+                        <Text style={[styles.statText, { opacity: 0.5 }]}>{remaining}</Text>
+                        <Text style={[styles.statLabel, { opacity: 0.5 }]}>残り</Text>
+                    </View>
+                </View>
+            </View>
 
-        {/* Lado derecho - Estadísticas apiladas */}
-        <View
-          style={{
-            width: 110,
-            padding: 16,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          {/* Porcentaje grande */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 36,
-              color: colors.accent,
-              includeFontPadding: false,
-              lineHeight: 40,
-            }}
-          >
-            {Math.round(progress * 100)}
-            <Text style={{ fontSize: 18 }}>%</Text>
-          </Text>
+            {/* Botones de acción */}
+            <View style={styles.actionButtons}>
+                <Pressable
+                    onPress={onPractice}
+                    style={[styles.practiceButton, { backgroundColor: categoryColor }]}
+                >
+                    <GraduationCap size={18} color="#FFFFFF" strokeWidth={2} />
+                    <Text style={styles.practiceButtonText}>練習</Text>
+                </Pressable>
 
-          {/* Aprendidas */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginTop: 8,
-            }}
-          >
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: colors.accent,
-                marginRight: 6,
-              }}
-            />
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_500Medium",
-                fontSize: 13,
-                color: colors.text,
-                opacity: 0.8,
-              }}
-            >
-              {learnedCount} 習得
-            </Text>
-          </View>
-
-          {/* Restantes */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginTop: 4,
-            }}
-          >
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: colors.accent,
-                opacity: 0.3,
-                marginRight: 6,
-              }}
-            />
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 13,
-                color: colors.text,
-                opacity: 0.5,
-              }}
-            >
-              {remaining} 残り
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Botones de acción */}
-      <View
-        style={{
-          flexDirection: "row",
-          paddingHorizontal: 16,
-          paddingBottom: 16,
-          gap: 10,
-        }}
-      >
-        {/* Botón Practicar */}
-        <Pressable
-          onPress={onPractice}
-          style={{
-            flex: 1,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.accent,
-            height: 46,
-            borderRadius: 12,
-            gap: 8,
-          }}
-        >
-          <GraduationCap size={18} color="#FFFFFF" strokeWidth={2} />
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 15,
-              color: "#FFFFFF",
-            }}
-          >
-            練習を始める
-          </Text>
-        </Pressable>
-
-        {/* Botón Aleatorio */}
-        <Pressable
-          onPress={onShuffle}
-          style={{
-            width: 46,
-            height: 46,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "#FFFFFF",
-            borderRadius: 12,
-          }}
-        >
-          <Shuffle size={20} color={colors.accent} strokeWidth={2.5} />
-        </Pressable>
-      </View>
-    </Surface>
-  );
+                <Pressable onPress={onShuffle} style={styles.shuffleButton}>
+                    <Shuffle size={20} color={categoryColor} strokeWidth={2.5} />
+                </Pressable>
+            </View>
+        </Animated.View>
+    );
 };
+
+const WordCard = ({
+    word,
+    categoryColor,
+    onPress,
+    index,
+}: {
+    word: VocabWord;
+    categoryColor: string;
+    onPress: () => void;
+    index: number;
+}) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
+
+    const handlePressIn = () => {
+        scale.value = pressScale(0.98);
+    };
+
+    const handlePressOut = () => {
+        scale.value = releaseScale();
+    };
+
+    return (
+        <Animated.View
+            entering={listItemEnter(index)}
+            style={styles.wordCard}
+        >
+            <Animated.View style={[{ flex: 1 }, animatedStyle]}>
+                <Pressable
+                    onPress={onPress}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    style={styles.wordPressable}
+                >
+                    <View style={styles.wordCardInner}>
+                        {/* Contenido - solo palabra japonesa y lectura */}
+                        <View style={[
+                            styles.wordContent,
+                            !(word.reading && word.reading !== word.japanese) && styles.wordContentCentered
+                        ]}>
+                            <Text style={[styles.wordJapanese, { color: categoryColor }]} numberOfLines={1}>
+                                {word.japanese}
+                            </Text>
+                            {word.reading && word.reading !== word.japanese && (
+                                <Text style={styles.wordReading} numberOfLines={1}>
+                                    {word.reading}
+                                </Text>
+                            )}
+                        </View>
+
+                        {/* Botón de audio */}
+                        <Pressable style={styles.audioButton}>
+                            <Volume2 size={16} color={categoryColor} strokeWidth={2.5} />
+                        </Pressable>
+                    </View>
+                </Pressable>
+            </Animated.View>
+        </Animated.View>
+    );
+};
+
+// ============================================================================
+// PANTALLA PRINCIPAL
+// ============================================================================
 
 export default function CategoryScreen() {
-  const { id } = useLocalSearchParams();
-  const router = useRouter();
-  const categoryId = typeof id === "string" ? id : "people";
+    const { id } = useLocalSearchParams();
+    const router = useRouter();
+    const categoryId = typeof id === 'string' ? id : 'people';
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const [learnedWords, setLearnedWords] = useState<Set<string>>(new Set());
-  const inputRef = useRef<TextInput>(null);
+    // Obtener datos
+    const category = useMemo(() => getCategoryById(categoryId), [categoryId]);
+    const words = useMemo(() => VOCAB_DATA[categoryId] || [], [categoryId]);
+    const categoryColor = CATEGORY_COLORS[categoryId] || CATEGORY_COLORS.people;
 
-  // Animación de búsqueda
-  const searchAnim = useRef(new Animated.Value(0)).current;
+    const learnedWords = 0; // TODO: Conectar con sistema de progreso
 
-  useEffect(() => {
-    Animated.spring(searchAnim, {
-      toValue: isSearchActive ? 1 : 0,
-      useNativeDriver: false,
-      tension: 65,
-      friction: 11,
-    }).start(() => {
-      if (isSearchActive && inputRef.current) {
-        inputRef.current.focus();
-      }
-    });
-  }, [isSearchActive]);
+    const handleWordPress = (word: VocabWord) => {
+        router.push(`/modules/vocab/word/${word.id}` as any);
+    };
 
-  // Obtener datos de la categoría
-  const category = useMemo(() => getCategoryById(categoryId), [categoryId]);
-  const words = useMemo(() => VOCAB_DATA[categoryId] || [], [categoryId]);
-  const colors = CATEGORY_COLORS[categoryId] || CATEGORY_COLORS.people;
+    const handlePractice = () => {
+        router.push(`/modules/vocab/practice/${categoryId}` as any);
+    };
 
-  // Filtrar palabras por búsqueda
-  const filteredWords = useMemo(() => {
-    if (!searchQuery.trim()) return words;
-    const query = searchQuery.toLowerCase();
-    return words.filter(
-      (word) =>
-        word.japanese.includes(searchQuery) ||
-        word.reading?.includes(searchQuery) ||
-        word.meaning.toLowerCase().includes(query)
-    );
-  }, [words, searchQuery]);
+    const handleShuffle = () => {
+        router.push(`/modules/vocab/practice/${categoryId}?shuffle=true` as any);
+    };
 
-  const handleWordPress = (word: VocabWord) => {
-    router.push(`/modules/vocab/word/${word.id}` as any);
-  };
-
-  const handlePractice = () => {
-    router.push(`/modules/vocab/practice/${categoryId}` as any);
-  };
-
-  const handleShuffle = () => {
-    // Navegar a práctica con modo aleatorio
-    router.push(`/modules/vocab/practice/${categoryId}?shuffle=true` as any);
-  };
-
-  const handleToggleSearch = () => {
-    if (isSearchActive) {
-      Keyboard.dismiss();
-      setSearchQuery("");
-      setIsSearchActive(false);
-    } else {
-      setIsSearchActive(true);
+    if (!category) {
+        return (
+            <SafeAreaView style={[styles.container, styles.centerContent]}>
+                <Text style={styles.errorText}>カテゴリーが見つかりません</Text>
+            </SafeAreaView>
+        );
     }
-  };
 
-  if (!category) {
     return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          backgroundColor: "#FFFFFF",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Text>Categoría no encontrada</Text>
-      </SafeAreaView>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar style="light" />
+            <Stack.Screen options={{ headerShown: false }} />
+
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Header de categoría */}
+                <CategoryHeader
+                    title={category.titleJp}
+                    subtitle={category.titleEs}
+                    wordCount={words.length}
+                    learnedCount={learnedWords}
+                    categoryColor={categoryColor}
+                    onPractice={handlePractice}
+                    onShuffle={handleShuffle}
+                />
+
+                {/* Contador de palabras */}
+                <View style={styles.wordCountSection}>
+                    <Text style={styles.wordCountText}>{words.length}語</Text>
+                </View>
+
+                {/* Lista de palabras - ALTURA UNIFORME */}
+                <View style={styles.wordsContainer}>
+                    {words.map((word, index) => (
+                        <WordCard
+                            key={word.id}
+                            word={word}
+                            categoryColor={categoryColor}
+                            onPress={() => handleWordPress(word)}
+                            index={index}
+                        />
+                    ))}
+                </View>
+            </ScrollView>
+        </SafeAreaView>
     );
-  }
-
-  return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-      edges={["top"]}
-    >
-      <StatusBar style="dark" />
-      <Stack.Screen options={{ headerShown: false }} />
-
-      {/* Header con título y búsqueda animada */}
-      <View
-        style={{ paddingHorizontal: PADDING, paddingTop: 10, paddingBottom: 8 }}
-      >
-        <View
-          style={{ flexDirection: "row", alignItems: "center", height: 44 }}
-        >
-          {/* Título - se oculta cuando la búsqueda está activa */}
-          <Animated.View
-            style={{
-              opacity: searchAnim.interpolate({
-                inputRange: [0, 0.3],
-                outputRange: [1, 0],
-                extrapolate: "clamp",
-              }),
-              transform: [
-                {
-                  translateX: searchAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, -100],
-                  }),
-                },
-              ],
-              position: "absolute",
-              left: 0,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_700Bold",
-                fontSize: 24,
-                color: colors.text,
-              }}
-            >
-              {category.titleJp}
-            </Text>
-          </Animated.View>
-
-          {/* Espaciador flexible */}
-          <View style={{ flex: 1 }} />
-
-          {/* Contenedor de búsqueda animado */}
-          <Animated.View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: isSearchActive ? "#F3F4F6" : colors.bg,
-              borderRadius: 12,
-              height: 44,
-              width: searchAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [44, width - PADDING * 2],
-              }),
-              overflow: "hidden",
-            }}
-          >
-            {/* Botón de lupa / cerrar */}
-            <Pressable
-              onPress={handleToggleSearch}
-              style={{
-                width: 44,
-                height: 44,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Animated.View
-                style={{
-                  transform: [
-                    {
-                      rotate: searchAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ["0deg", "90deg"],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                {isSearchActive ? (
-                  <X size={20} color={colors.accent} strokeWidth={2.5} />
-                ) : (
-                  <Search size={20} color={colors.accent} strokeWidth={2.5} />
-                )}
-              </Animated.View>
-            </Pressable>
-
-            {/* Campo de texto */}
-            <Animated.View
-              style={{
-                flex: 1,
-                opacity: searchAnim.interpolate({
-                  inputRange: [0.5, 1],
-                  outputRange: [0, 1],
-                  extrapolate: "clamp",
-                }),
-                marginRight: 12,
-              }}
-            >
-              <TextInput
-                ref={inputRef}
-                placeholder="このカテゴリーで検索..."
-                placeholderTextColor="#9CA3AF"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-                style={{
-                  fontFamily: "NotoSansJP_400Regular",
-                  fontSize: 15,
-                  color: "#1F2937",
-                  height: 44,
-                  paddingVertical: 0,
-                }}
-              />
-            </Animated.View>
-          </Animated.View>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header de categoría */}
-        <CategoryHeader
-          title={category.titleJp}
-          subtitle={category.titleEs}
-          wordCount={words.length}
-          learnedCount={learnedWords.size}
-          colors={colors}
-          onPractice={handlePractice}
-          onShuffle={handleShuffle}
-        />
-
-        {/* Contador de resultados si hay búsqueda */}
-        {searchQuery.trim() && (
-          <View style={{ paddingHorizontal: PADDING, marginBottom: 8 }}>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 13,
-                color: "#9CA3AF",
-              }}
-            >
-              {filteredWords.length} resultado
-              {filteredWords.length !== 1 ? "s" : ""}
-            </Text>
-          </View>
-        )}
-
-        {/* Lista de palabras */}
-        {filteredWords.map((word) => (
-          <WordCard
-            key={word.id}
-            word={word}
-            colors={colors}
-            onPress={() => handleWordPress(word)}
-            isLearned={learnedWords.has(word.id)}
-          />
-        ))}
-
-        {/* Mensaje si no hay resultados */}
-        {filteredWords.length === 0 && (
-          <View style={{ padding: PADDING * 2, alignItems: "center" }}>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 14,
-                color: "#9CA3AF",
-                textAlign: "center",
-              }}
-            >
-              No se encontraron palabras para "{searchQuery}"
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
 }
+
+// ============================================================================
+// ESTILOS
+// ============================================================================
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.bg,
+    },
+    centerContent: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scrollContent: {
+        paddingHorizontal: spacing.screen,
+        paddingBottom: spacing.xxl,
+    },
+    errorText: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 14,
+        color: colors.text.secondary,
+    },
+
+    // Category Header
+    categoryHeader: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.lg,
+        overflow: 'hidden',
+        marginTop: spacing.md,
+        marginBottom: spacing.lg,
+    },
+    headerContent: {
+        flexDirection: 'row',
+        minHeight: 120,
+        padding: spacing.xl,
+        gap: spacing.xl,
+    },
+    headerLeft: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 32,
+        includeFontPadding: false,
+    },
+    headerSubtitle: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 14,
+        color: colors.text.secondary,
+        marginTop: spacing.xs,
+    },
+    headerProgressBar: {
+        marginTop: spacing.md,
+        height: 4,
+        width: '80%',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    headerProgressFill: {
+        height: '100%',
+        borderRadius: 2,
+    },
+    headerRight: {
+        width: 90,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerPercentage: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 36,
+        includeFontPadding: false,
+        lineHeight: 40,
+    },
+    headerPercentageSymbol: {
+        fontSize: 18,
+    },
+    statRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: spacing.xs,
+        gap: spacing.xs,
+    },
+    statText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 13,
+        color: colors.text.secondary,
+    },
+    statLabel: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 11,
+        color: colors.text.secondary,
+    },
+    actionButtons: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.lg,
+        gap: spacing.sm,
+    },
+    practiceButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 46,
+        borderRadius: radius.sm,
+        gap: spacing.sm,
+    },
+    practiceButtonText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 15,
+        color: '#FFFFFF',
+    },
+    shuffleButton: {
+        width: 46,
+        height: 46,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.surfaceLight,
+        borderRadius: radius.sm,
+    },
+
+    // Word Count Section
+    wordCountSection: {
+        marginBottom: spacing.lg,
+    },
+    wordCountText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 12,
+        color: colors.text.tertiary,
+    },
+
+    // Words Container
+    wordsContainer: {
+        gap: spacing.sm,
+    },
+    wordCard: {
+        width: '100%',
+        height: WORD_CARD_HEIGHT, // ALTURA FIJA
+    },
+    wordPressable: {
+        flex: 1,
+    },
+    wordCardInner: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.surface,
+        borderRadius: radius.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.lg,
+    },
+    wordContent: {
+        flex: 1,
+        justifyContent: 'center',
+        gap: 2,
+        paddingVertical: 2,
+    },
+    wordContentCentered: {
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+    },
+    wordJapanese: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 19,
+        includeFontPadding: false,
+        lineHeight: 24,
+    },
+    wordReading: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 12,
+        color: colors.text.tertiary,
+        includeFontPadding: false,
+        lineHeight: 16,
+    },
+    audioButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: spacing.md,
+    },
+});

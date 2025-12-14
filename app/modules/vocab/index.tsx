@@ -1,740 +1,424 @@
-// app/modules/vocab/index.tsx
-import React, { useState, useRef, useEffect } from "react";
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { staggeredCardEnter, headerEnter, pressScale, releaseScale } from '@/src/core/animations';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Text } from 'react-native-paper';
 import {
-  View,
-  ScrollView,
-  Dimensions,
-  Animated,
-  Pressable,
-  TextInput,
-  Keyboard,
-} from "react-native";
-import { Text, Surface, TouchableRipple } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import {
-  BookOpen,
-  Users,
-  Utensils,
-  Shirt,
-  Home,
-  Car,
-  Wrench,
-  Calendar,
-  MapPin,
-  Building2,
-  Heart,
-  Leaf,
-  Sparkles,
-  Briefcase,
-  Hash,
-  Search,
-  X,
-} from "lucide-react-native";
+    Users,
+    Utensils,
+    Shirt,
+    Home,
+    Car,
+    Wrench,
+    Calendar,
+    MapPin,
+    Building2,
+    Heart,
+    Leaf,
+    Sparkles,
+    Briefcase,
+    Hash,
+    Clock,
+} from 'lucide-react-native';
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 
-// Color base del módulo (N5)
-const THEME_COLOR = "#F5A238";
-const THEME_LIGHT = "#FEF7ED";
+// ============================================================================
+// COLORES Y TOKENS - Consistente con homescreen
+// ============================================================================
 
-// Colores por categoría - Paleta vibrante y armónica
-const CATEGORY_COLORS: Record<
-  string,
-  { bg: string; text: string; icon: string }
-> = {
-  people: { bg: "#FFF0F5", text: "#DB2777", icon: "#EC4899" },
-  food: { bg: "#FEF3E2", text: "#EA580C", icon: "#F97316" },
-  clothes: { bg: "#F0F9FF", text: "#0369A1", icon: "#0EA5E9" },
-  house: { bg: "#F5F3FF", text: "#7C3AED", icon: "#8B5CF6" },
-  vehicle: { bg: "#ECFDF5", text: "#059669", icon: "#10B981" },
-  tools: { bg: "#FEF9C3", text: "#CA8A04", icon: "#EAB308" },
-  date: { bg: "#FCE7F3", text: "#BE185D", icon: "#EC4899" },
-  time: { bg: "#E0E7FF", text: "#4338CA", icon: "#6366F1" },
-  location: { bg: "#CCFBF1", text: "#0D9488", icon: "#14B8A6" },
-  facility: { bg: "#FEE2E2", text: "#DC2626", icon: "#EF4444" },
-  body: { bg: "#FFE4E6", text: "#E11D48", icon: "#F43F5E" },
-  nature: { bg: "#D1FAE5", text: "#047857", icon: "#10B981" },
-  condition: { bg: "#E0F2FE", text: "#0284C7", icon: "#0EA5E9" },
-  work: { bg: "#F3E8FF", text: "#9333EA", icon: "#A855F7" },
-  numbers: { bg: "#FDF4FF", text: "#A21CAF", icon: "#D946EF" },
+const colors = {
+    bg: '#151621',
+    surface: '#1E2030',
+    surfaceLight: '#262940',
+    text: {
+        primary: '#FFFFFF',
+        secondary: '#8F92A8',
+        tertiary: '#5D6080',
+    },
+    levels: {
+        n5: { primary: '#F0A55A', light: 'rgba(240, 165, 90, 0.12)' },
+    },
+};
+
+const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, screen: 20 };
+const radius = { sm: 10, md: 14, lg: 18, xl: 28 };
+
+// Colores específicos por categoría
+const CATEGORY_COLORS: Record<string, string> = {
+    people: '#EC4899',
+    food: '#F97316',
+    clothes: '#0EA5E9',
+    house: '#8B5CF6',
+    vehicle: '#10B981',
+    tools: '#EAB308',
+    date: '#EC4899',
+    time: '#6366F1',
+    location: '#14B8A6',
+    facility: '#EF4444',
+    body: '#F43F5E',
+    nature: '#10B981',
+    condition: '#0EA5E9',
+    work: '#A855F7',
+    numbers: '#D946EF',
 };
 
 // Iconos por categoría
 const CATEGORY_ICONS: Record<string, any> = {
-  people: Users,
-  food: Utensils,
-  clothes: Shirt,
-  house: Home,
-  vehicle: Car,
-  tools: Wrench,
-  date: Calendar,
-  time: Calendar,
-  location: MapPin,
-  facility: Building2,
-  body: Heart,
-  nature: Leaf,
-  condition: Sparkles,
-  work: Briefcase,
-  numbers: Hash,
+    people: Users,
+    food: Utensils,
+    clothes: Shirt,
+    house: Home,
+    vehicle: Car,
+    tools: Wrench,
+    date: Calendar,
+    time: Clock,
+    location: MapPin,
+    facility: Building2,
+    body: Heart,
+    nature: Leaf,
+    condition: Sparkles,
+    work: Briefcase,
+    numbers: Hash,
 };
 
 type VocabCategory = {
-  id: string;
-  titleJp: string;
-  titleEs: string;
-  icon: keyof typeof CATEGORY_ICONS;
-  wordCount: number;
-  progress: number;
+    id: string;
+    title: string;
+    subtitle: string;
+    detail: string;
+    progress: number;
+    icon: keyof typeof CATEGORY_ICONS;
 };
 
-// Categorías del vocabulario N5
+// Categorías del vocabulario N5 - solo japonés
 const CATEGORIES: VocabCategory[] = [
-  {
-    id: "people",
-    titleJp: "人",
-    titleEs: "Personas",
-    icon: "people",
-    wordCount: 43,
-    progress: 0,
-  },
-  {
-    id: "food",
-    titleJp: "食べ物",
-    titleEs: "Comida",
-    icon: "food",
-    wordCount: 41,
-    progress: 0,
-  },
-  {
-    id: "clothes",
-    titleJp: "服",
-    titleEs: "Ropa",
-    icon: "clothes",
-    wordCount: 16,
-    progress: 0,
-  },
-  {
-    id: "house",
-    titleJp: "家",
-    titleEs: "Casa",
-    icon: "house",
-    wordCount: 17,
-    progress: 0,
-  },
-  {
-    id: "vehicle",
-    titleJp: "乗り物",
-    titleEs: "Transporte",
-    icon: "vehicle",
-    wordCount: 11,
-    progress: 0,
-  },
-  {
-    id: "tools",
-    titleJp: "道具",
-    titleEs: "Herramientas",
-    icon: "tools",
-    wordCount: 22,
-    progress: 0,
-  },
-  {
-    id: "date",
-    titleJp: "日付",
-    titleEs: "Fechas",
-    icon: "date",
-    wordCount: 30,
-    progress: 0,
-  },
-  {
-    id: "time",
-    titleJp: "時間",
-    titleEs: "Tiempo",
-    icon: "time",
-    wordCount: 29,
-    progress: 0,
-  },
-  {
-    id: "location",
-    titleJp: "位置",
-    titleEs: "Ubicación",
-    icon: "location",
-    wordCount: 20,
-    progress: 0,
-  },
-  {
-    id: "facility",
-    titleJp: "施設",
-    titleEs: "Lugares",
-    icon: "facility",
-    wordCount: 31,
-    progress: 0,
-  },
-  {
-    id: "body",
-    titleJp: "体",
-    titleEs: "Cuerpo",
-    icon: "body",
-    wordCount: 17,
-    progress: 0,
-  },
-  {
-    id: "nature",
-    titleJp: "自然",
-    titleEs: "Naturaleza",
-    icon: "nature",
-    wordCount: 18,
-    progress: 0,
-  },
-  {
-    id: "condition",
-    titleJp: "状態",
-    titleEs: "Estados",
-    icon: "condition",
-    wordCount: 22,
-    progress: 0,
-  },
-  {
-    id: "work",
-    titleJp: "仕事",
-    titleEs: "Trabajo y Estudio",
-    icon: "work",
-    wordCount: 38,
-    progress: 0,
-  },
-  {
-    id: "numbers",
-    titleJp: "数字",
-    titleEs: "Números",
-    icon: "numbers",
-    wordCount: 80,
-    progress: 0,
-  },
+    { id: 'people', title: '人', subtitle: '人物', detail: '43語', progress: 0.35, icon: 'people' },
+    { id: 'food', title: '食べ物', subtitle: '食品', detail: '41語', progress: 0.12, icon: 'food' },
+    { id: 'clothes', title: '服', subtitle: '衣類', detail: '16語', progress: 0, icon: 'clothes' },
+    { id: 'house', title: '家', subtitle: '住居', detail: '17語', progress: 0, icon: 'house' },
+    { id: 'vehicle', title: '乗り物', subtitle: '交通', detail: '11語', progress: 0.55, icon: 'vehicle' },
+    { id: 'tools', title: '道具', subtitle: '用具', detail: '22語', progress: 0, icon: 'tools' },
+    { id: 'date', title: '日付', subtitle: '暦', detail: '30語', progress: 0, icon: 'date' },
+    { id: 'time', title: '時間', subtitle: '時刻', detail: '29語', progress: 0.28, icon: 'time' },
+    { id: 'location', title: '位置', subtitle: '場所', detail: '20語', progress: 0, icon: 'location' },
+    { id: 'facility', title: '施設', subtitle: '建物', detail: '31語', progress: 0, icon: 'facility' },
+    { id: 'body', title: '体', subtitle: '身体', detail: '17語', progress: 0, icon: 'body' },
+    { id: 'nature', title: '自然', subtitle: '環境', detail: '18語', progress: 0, icon: 'nature' },
+    { id: 'condition', title: '状態', subtitle: '様子', detail: '22語', progress: 0, icon: 'condition' },
+    { id: 'work', title: '仕事', subtitle: '職業', detail: '38語', progress: 0, icon: 'work' },
+    { id: 'numbers', title: '数字', subtitle: '数', detail: '80語', progress: 0, icon: 'numbers' },
 ];
 
-// Grid config
-// Grid config
-const PADDING = 20;
-const GAP = 12;
-const NUM_COLUMNS = 2;
-const CARD_WIDTH = (width - PADDING * 2 - GAP) / NUM_COLUMNS;
+// ============================================================================
+// COMPONENTES
+// ============================================================================
 
-// Border radius por categoría - diseño orgánico
-const CATEGORY_BORDER_RADIUS: Record<
-  string,
-  {
-    topLeft: number;
-    topRight: number;
-    bottomLeft: number;
-    bottomRight: number;
-  }
-> = {
-  people: { topLeft: 20, topRight: 12, bottomLeft: 14, bottomRight: 22 },
-  food: { topLeft: 14, topRight: 20, bottomLeft: 18, bottomRight: 12 },
-  clothes: { topLeft: 18, topRight: 14, bottomLeft: 12, bottomRight: 20 },
-  house: { topLeft: 12, topRight: 22, bottomLeft: 20, bottomRight: 14 },
-  vehicle: { topLeft: 22, topRight: 16, bottomLeft: 14, bottomRight: 18 },
-  tools: { topLeft: 16, topRight: 12, bottomLeft: 22, bottomRight: 16 },
-  date: { topLeft: 14, topRight: 18, bottomLeft: 16, bottomRight: 22 },
-  time: { topLeft: 20, topRight: 14, bottomLeft: 18, bottomRight: 14 },
-  location: { topLeft: 12, topRight: 20, bottomLeft: 14, bottomRight: 18 },
-  facility: { topLeft: 18, topRight: 22, bottomLeft: 12, bottomRight: 16 },
-  body: { topLeft: 16, topRight: 14, bottomLeft: 20, bottomRight: 12 },
-  nature: { topLeft: 22, topRight: 18, bottomLeft: 16, bottomRight: 20 },
-  condition: { topLeft: 14, topRight: 16, bottomLeft: 22, bottomRight: 14 },
-  work: { topLeft: 18, topRight: 20, bottomLeft: 14, bottomRight: 18 },
-  numbers: { topLeft: 20, topRight: 12, bottomLeft: 18, bottomRight: 22 },
-  adjectives: { topLeft: 12, topRight: 18, bottomLeft: 20, bottomRight: 16 },
-  verbs: { topLeft: 16, topRight: 22, bottomLeft: 12, bottomRight: 20 },
-};
-
-const getCategoryRadius = (categoryId: string) => {
-  return (
-    CATEGORY_BORDER_RADIUS[categoryId] || {
-      topLeft: 16,
-      topRight: 16,
-      bottomLeft: 16,
-      bottomRight: 16,
-    }
-  );
-};
-
-// Componente de tarjeta de categoría
 const CategoryCard = ({
-  category,
-  onPress,
+    category,
+    index,
+    onPress,
 }: {
-  category: VocabCategory;
-  onPress: () => void;
+    category: VocabCategory;
+    index: number;
+    onPress: () => void;
 }) => {
-  const colors = CATEGORY_COLORS[category.id] || CATEGORY_COLORS.people;
-  const IconComponent = CATEGORY_ICONS[category.icon] || BookOpen;
+    const categoryColor = CATEGORY_COLORS[category.id] || CATEGORY_COLORS.people;
+    const IconComponent = CATEGORY_ICONS[category.icon] || Users;
+    const scale = useSharedValue(1);
 
-  return (
-    <Surface
-      style={{
-        width: CARD_WIDTH,
-        borderTopLeftRadius: getCategoryRadius(category.id).topLeft,
-        borderTopRightRadius: getCategoryRadius(category.id).topRight,
-        borderBottomLeftRadius: getCategoryRadius(category.id).bottomLeft,
-        borderBottomRightRadius: getCategoryRadius(category.id).bottomRight,
-        overflow: "hidden",
-        backgroundColor: colors.bg,
-      }}
-      elevation={0}
-    >
-      <TouchableRipple
-        onPress={onPress}
-        rippleColor={`${colors.icon}20`}
-        style={{
-          padding: 16,
-          borderTopLeftRadius: getCategoryRadius(category.id).topLeft,
-          borderTopRightRadius: getCategoryRadius(category.id).topRight,
-          borderBottomLeftRadius: getCategoryRadius(category.id).bottomLeft,
-          borderBottomRightRadius: getCategoryRadius(category.id).bottomRight,
-        }}
-      >
-        <View>
-          {/* Icono y título japonés */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: Math.min(
-                  getCategoryRadius(category.id).topLeft,
-                  12
-                ),
-                backgroundColor: `${colors.icon}20`,
-                justifyContent: "center",
-                alignItems: "center",
-                marginRight: 10,
-              }}
-            >
-              <IconComponent size={20} color={colors.icon} strokeWidth={2} />
-            </View>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_700Bold",
-                fontSize: 20,
-                color: colors.text,
-              }}
-            >
-              {category.titleJp}
-            </Text>
-          </View>
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
 
-          {/* Título en español */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 14,
-              color: colors.text,
-              opacity: 0.8,
-              marginBottom: 8,
-            }}
-          >
-            {category.titleEs}
-          </Text>
+    const handlePressIn = () => {
+        scale.value = pressScale(0.96);
+    };
 
-          {/* Contador de palabras */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 12,
-                color: colors.text,
-                opacity: 0.6,
-              }}
-            >
-              {category.wordCount} palabras
-            </Text>
+    const handlePressOut = () => {
+        scale.value = releaseScale();
+    };
 
-            {/* Barra de progreso mini */}
-            <View
-              style={{
-                width: 40,
-                height: 4,
-                backgroundColor: `${colors.icon}30`,
-                borderRadius: 2,
-                overflow: "hidden",
-              }}
+    return (
+        <Animated.View
+            entering={staggeredCardEnter(index, 100, 50)}
+            style={styles.categoryWrapper}
+        >
+            <Pressable
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                style={styles.categoryWrapper}
             >
-              <View
-                style={{
-                  width: `${category.progress * 100}%`,
-                  height: "100%",
-                  backgroundColor: colors.icon,
-                  borderRadius: 2,
-                }}
-              />
-            </View>
-          </View>
-        </View>
-      </TouchableRipple>
-    </Surface>
-  );
+                <Animated.View style={[styles.categoryCard, { backgroundColor: colors.surface }, animatedStyle]}>
+                    {/* Parte superior - Icono + Detalle */}
+                    <View style={styles.cardTop}>
+                        <IconComponent size={32} color={categoryColor} strokeWidth={2.2} />
+                        <Text style={[styles.detailText, { color: categoryColor }]}>{category.detail}</Text>
+                    </View>
+
+                    {/* Parte inferior - Textos + Progreso */}
+                    <View style={styles.cardBottom}>
+                        <View style={styles.textGroup}>
+                            <Text style={styles.categoryTitle}>{category.title}</Text>
+                            <Text style={styles.categorySubtitle} numberOfLines={1}>
+                                {category.subtitle}
+                            </Text>
+                        </View>
+
+                        {/* Barra de progreso - SIEMPRE VISIBLE */}
+                        <View style={styles.progressContainer}>
+                            <View
+                                style={[
+                                    styles.progressTrack,
+                                    { backgroundColor: `${categoryColor}20` },
+                                ]}
+                            >
+                                <View
+                                    style={[
+                                        styles.progressBar,
+                                        {
+                                            width: `${category.progress * 100}%`,
+                                            backgroundColor: categoryColor,
+                                        },
+                                    ]}
+                                />
+                            </View>
+                            <Text style={[styles.progressText, { color: categoryColor }]}>
+                                {Math.round(category.progress * 100)}%
+                            </Text>
+                        </View>
+                    </View>
+                </Animated.View>
+            </Pressable>
+        </Animated.View>
+    );
 };
 
-// Header con estadísticas
-const StatsHeader = ({
-  totalWords,
-  learnedWords,
-}: {
-  totalWords: number;
-  learnedWords: number;
-}) => {
-  const progress = totalWords > 0 ? learnedWords / totalWords : 0;
-
-  return (
-    <Surface
-      style={{
-        marginHorizontal: PADDING,
-        marginBottom: 16,
-        borderRadius: 20,
-        backgroundColor: THEME_LIGHT,
-        padding: 16,
-      }}
-      elevation={0}
-    >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {/* Icono y título */}
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              backgroundColor: THEME_COLOR,
-              justifyContent: "center",
-              alignItems: "center",
-              marginRight: 12,
-            }}
-          >
-            <BookOpen size={24} color="#FFFFFF" strokeWidth={2} />
-          </View>
-          <View>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_700Bold",
-                fontSize: 18,
-                color: "#1F2937",
-              }}
-            >
-              語彙 N5
-            </Text>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 13,
-                color: "#6B7280",
-              }}
-            >
-              {learnedWords} / {totalWords} palabras
-            </Text>
-          </View>
-        </View>
-
-        {/* Progreso circular */}
-        <View style={{ alignItems: "center" }}>
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 24,
-              color: THEME_COLOR,
-            }}
-          >
-            {Math.round(progress * 100)}%
-          </Text>
-        </View>
-      </View>
-
-      {/* Barra de progreso */}
-      <View
-        style={{
-          marginTop: 12,
-          height: 8,
-          backgroundColor: "#E5E7EB",
-          borderRadius: 4,
-          overflow: "hidden",
-        }}
-      >
-        <View
-          style={{
-            width: `${progress * 100}%`,
-            height: "100%",
-            backgroundColor: THEME_COLOR,
-            borderRadius: 4,
-          }}
-        />
-      </View>
-    </Surface>
-  );
-};
+// ============================================================================
+// PANTALLA PRINCIPAL
+// ============================================================================
 
 export default function VocabScreen() {
-  const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+    const router = useRouter();
 
-  // Animación para la barra de búsqueda
-  const searchAnim = useRef(new Animated.Value(0)).current;
+    const handleCategoryPress = (categoryId: string) => {
+        router.push(`/modules/vocab/category/${categoryId}` as any);
+    };
 
-  useEffect(() => {
-    Animated.spring(searchAnim, {
-      toValue: isSearchActive ? 1 : 0,
-      useNativeDriver: false,
-      tension: 65,
-      friction: 11,
-    }).start(() => {
-      // Focus en el input cuando la animación termina de abrir
-      if (isSearchActive && inputRef.current) {
-        inputRef.current.focus();
-      }
-    });
-  }, [isSearchActive]);
+    // Cálculo de tamaños más grandes para las tarjetas
+    const headerHeight = 100;
+    const safeAreaTop = 50;
+    const bottomPadding = 20;
+    const availableHeight = height - headerHeight - safeAreaTop - bottomPadding;
 
-  const handleCategoryPress = (categoryId: string) => {
-    router.push(`/modules/vocab/category/${categoryId}` as any);
-  };
+    // 3 filas con más espacio entre ellas
+    const cardHeight = (availableHeight - spacing.md * 4) / 3;
+    const cardWidth = (width - spacing.screen * 2 - spacing.md) / 2;
 
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      router.push(
-        `/modules/vocab/search?q=${encodeURIComponent(searchQuery)}` as any
-      );
-    }
-  };
+    return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar style="light" />
+            <Stack.Screen options={{ headerShown: false }} />
 
-  const handleToggleSearch = () => {
-    if (isSearchActive) {
-      Keyboard.dismiss();
-      setSearchQuery("");
-      setIsSearchActive(false);
-    } else {
-      setIsSearchActive(true);
-    }
-  };
+            <View style={styles.content}>
+                {/* Header - estilo consistente con levels */}
+                <Animated.View entering={headerEnter()} style={styles.header}>
+                    <View style={styles.headerLeft}>
+                        <View style={[styles.levelBadge, { backgroundColor: colors.levels.n5.light }]}>
+                            <Text style={[styles.levelBadgeText, { color: colors.levels.n5.primary }]}>
+                                N5
+                            </Text>
+                        </View>
+                        <View style={styles.titleContainer}>
+                            <Text style={styles.levelName}>語彙</Text>
+                            <Text style={styles.levelSubtitle}>基本単語</Text>
+                        </View>
+                    </View>
+                    <Text style={[styles.levelKanji, { color: colors.levels.n5.primary }]}>語</Text>
+                </Animated.View>
 
-  // Total de palabras
-  const totalWords = CATEGORIES.reduce((sum, cat) => sum + cat.wordCount, 0);
-  const learnedWords = 0; // TODO: Conectar con el sistema de progreso
-
-  // Filtrar categorías si hay búsqueda
-  const filteredCategories = searchQuery.trim()
-    ? CATEGORIES.filter(
-        (cat) =>
-          cat.titleJp.includes(searchQuery) ||
-          cat.titleEs.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : CATEGORIES;
-
-  // Interpolaciones de animación
-  const searchWidth = searchAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [44, width - PADDING * 2],
-  });
-
-  const titleOpacity = searchAnim.interpolate({
-    inputRange: [0, 0.3],
-    outputRange: [1, 0],
-    extrapolate: "clamp",
-  });
-
-  const titleTranslateX = searchAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -100],
-  });
-
-  const inputOpacity = searchAnim.interpolate({
-    inputRange: [0.5, 1],
-    outputRange: [0, 1],
-    extrapolate: "clamp",
-  });
-
-  const iconRotate = searchAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "90deg"],
-  });
-
-  return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-      edges={["top"]}
-    >
-      <StatusBar style="dark" />
-      <Stack.Screen options={{ headerShown: false }} />
-
-      {/* Header con título y búsqueda animada */}
-      <View
-        style={{ paddingHorizontal: PADDING, paddingTop: 10, paddingBottom: 8 }}
-      >
-        <View
-          style={{ flexDirection: "row", alignItems: "center", height: 44 }}
-        >
-          {/* Título - se oculta cuando la búsqueda está activa */}
-          <Animated.View
-            style={{
-              opacity: titleOpacity,
-              transform: [{ translateX: titleTranslateX }],
-              position: "absolute",
-              left: 0,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_700Bold",
-                fontSize: 24,
-                color: THEME_COLOR,
-              }}
-            >
-              語彙
-            </Text>
-          </Animated.View>
-
-          {/* Espaciador flexible */}
-          <View style={{ flex: 1 }} />
-
-          {/* Contenedor de búsqueda animado */}
-          <Animated.View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: isSearchActive ? "#F3F4F6" : THEME_LIGHT,
-              borderRadius: 12,
-              height: 44,
-              width: searchWidth,
-              overflow: "hidden",
-            }}
-          >
-            {/* Botón de lupa / cerrar */}
-            <Pressable
-              onPress={handleToggleSearch}
-              style={{
-                width: 44,
-                height: 44,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Animated.View
-                style={{
-                  transform: [{ rotate: iconRotate }],
-                }}
-              >
-                {isSearchActive ? (
-                  <X size={20} color={THEME_COLOR} strokeWidth={2.5} />
-                ) : (
-                  <Search size={20} color={THEME_COLOR} strokeWidth={2.5} />
-                )}
-              </Animated.View>
-            </Pressable>
-
-            {/* Campo de texto */}
-            <Animated.View
-              style={{
-                flex: 1,
-                opacity: inputOpacity,
-                marginRight: 12,
-              }}
-            >
-              <TextInput
-                ref={inputRef}
-                placeholder="単語を検索..."
-                placeholderTextColor="#9CA3AF"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onSubmitEditing={handleSearch}
-                returnKeyType="search"
-                style={{
-                  fontFamily: "NotoSansJP_400Regular",
-                  fontSize: 15,
-                  color: "#1F2937",
-                  height: 44,
-                  paddingVertical: 0,
-                }}
-              />
-            </Animated.View>
-          </Animated.View>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Stats Header */}
-        <View style={{ paddingTop: 8 }}>
-          <StatsHeader totalWords={totalWords} learnedWords={learnedWords} />
-        </View>
-
-        {/* Título de sección */}
-        <View style={{ paddingHorizontal: PADDING, marginBottom: 12 }}>
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_700Bold",
-              fontSize: 16,
-              color: "#374151",
-            }}
-          >
-            カテゴリー
-          </Text>
-        </View>
-
-        {/* Grid de categorías */}
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            paddingHorizontal: PADDING,
-            gap: GAP,
-          }}
-        >
-          {filteredCategories.map((category) => (
-            <CategoryCard
-              key={category.id}
-              category={category}
-              onPress={() => handleCategoryPress(category.id)}
-            />
-          ))}
-        </View>
-
-        {/* Mensaje si no hay resultados */}
-        {filteredCategories.length === 0 && searchQuery.trim() && (
-          <View style={{ padding: PADDING, alignItems: "center" }}>
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 14,
-                color: "#9CA3AF",
-                textAlign: "center",
-              }}
-            >
-              「{searchQuery}」の結果はありません
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+                {/* Grid de categorías - scroll vertical */}
+                <ScrollView
+                    contentContainerStyle={styles.categoriesContainer}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Filas de 2 columnas */}
+                    {Array.from({ length: Math.ceil(CATEGORIES.length / 2) }).map((_, rowIndex) => (
+                        <View key={rowIndex} style={styles.categoryRow}>
+                            {CATEGORIES.slice(rowIndex * 2, rowIndex * 2 + 2).map((category, colIndex) => (
+                                <View
+                                    key={category.id}
+                                    style={{ width: cardWidth, height: cardHeight }}
+                                >
+                                    <CategoryCard
+                                        category={category}
+                                        index={rowIndex * 2 + colIndex}
+                                        onPress={() => handleCategoryPress(category.id)}
+                                    />
+                                </View>
+                            ))}
+                        </View>
+                    ))}
+                </ScrollView>
+            </View>
+        </SafeAreaView>
+    );
 }
+
+// ============================================================================
+// ESTILOS
+// ============================================================================
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.bg,
+    },
+    content: {
+        flex: 1,
+        paddingHorizontal: spacing.screen,
+    },
+
+    // Header - igual que levels/[id].tsx
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.xxl,
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.lg,
+        flex: 1,
+    },
+    levelBadge: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: radius.sm,
+    },
+    levelBadgeText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 12,
+        includeFontPadding: false,
+        letterSpacing: 0.8,
+    },
+    titleContainer: {
+        flex: 1,
+    },
+    levelName: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 28,
+        color: colors.text.primary,
+        includeFontPadding: false,
+        letterSpacing: -0.5,
+        lineHeight: 34,
+    },
+    levelSubtitle: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 14,
+        color: colors.text.secondary,
+        includeFontPadding: false,
+        marginTop: 2,
+    },
+    levelKanji: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 52,
+        includeFontPadding: false,
+        lineHeight: 52,
+        marginLeft: spacing.md,
+    },
+
+    // Grid de categorías
+    categoriesContainer: {
+        gap: spacing.md,
+        paddingBottom: spacing.xl,
+    },
+    categoryRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
+
+    // Tarjetas - más grandes que antes
+    categoryWrapper: {
+        flex: 1,
+    },
+    categoryCard: {
+        flex: 1,
+        borderRadius: radius.lg,
+        padding: spacing.xl,
+        justifyContent: 'space-between',
+    },
+
+    // Parte superior (icono + detalle)
+    cardTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+
+    // Parte inferior (textos + progreso)
+    cardBottom: {
+        gap: spacing.md,
+    },
+    textGroup: {
+        gap: 4,
+    },
+    categoryTitle: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 22,
+        color: colors.text.primary,
+        includeFontPadding: false,
+        letterSpacing: -0.2,
+        lineHeight: 28,
+    },
+    categorySubtitle: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: 13,
+        color: colors.text.secondary,
+        includeFontPadding: false,
+        lineHeight: 18,
+        opacity: 0.8,
+    },
+
+    // Texto de detalle
+    detailText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 12,
+        includeFontPadding: false,
+        letterSpacing: 0.3,
+        opacity: 0.7,
+    },
+
+    // Progreso - SIEMPRE VISIBLE
+    progressContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginTop: spacing.xs,
+    },
+    progressTrack: {
+        flex: 1,
+        height: 5,
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressBar: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    progressText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 11,
+        includeFontPadding: false,
+        letterSpacing: 0.3,
+        opacity: 0.8,
+        minWidth: 32,
+        textAlign: 'right',
+    },
+});

@@ -1,538 +1,483 @@
-// app/modules/kana/index.tsx
-import React, { useState, useRef, useEffect } from "react";
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+} from 'react-native-reanimated';
+import { listItemEnter, pressScale, releaseScale, materialEasing, materialDuration } from '@/src/core/animations';
 import {
-  View,
-  ScrollView,
-  Dimensions,
-  Animated,
-  Pressable,
-} from "react-native";
-import { Text, Surface, TouchableRipple } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
+    Dimensions,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    View,
+} from 'react-native';
+// app/modules/kana/index.tsx
+import React, { useEffect, useRef, useState } from 'react';
 
-const { width } = Dimensions.get("window");
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Text } from 'react-native-paper';
 
-// Color base del módulo (N5)
-const THEME_COLOR = "#F5A238";
+const { width } = Dimensions.get('window');
 
-// Colores diferenciados para Hiragana y Katakana
-// Hiragana: tonos cálidos coral/rosa suave que armonizan con el naranja
-const HIRAGANA_CARD_BG = "#FFF5F5";
-const HIRAGANA_CARD_TEXT = "#C94C4C";
-const HIRAGANA_RIPPLE = "#E8787820";
+// ============================================================================
+// COLORES Y TOKENS
+// ============================================================================
 
-// Katakana: tonos azul/índigo suave que contrastan elegantemente
-const KATAKANA_CARD_BG = "#F0F4FF";
-const KATAKANA_CARD_TEXT = "#5B6DAF";
-const KATAKANA_RIPPLE = "#5B6DAF20";
+const colors = {
+    bg: '#151621',
+    surface: '#1E2030',
+    surfaceLight: '#262940',
+    text: {
+        primary: '#FFFFFF',
+        secondary: '#8F92A8',
+        tertiary: '#5D6080',
+    },
+    levels: {
+        n5: { primary: '#F0A55A', light: 'rgba(240, 165, 90, 0.12)' },
+        n4: { primary: '#5AC78B', light: 'rgba(90, 199, 139, 0.12)' },
+    },
+};
 
-type KanaChar = { char: string; romaji: string };
-type KanaGroup = { title: string; data: KanaChar[] };
+const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, screen: 20 };
+const radius = { sm: 10, md: 14, lg: 18, xl: 28 };
 
-const HIRAGANA_DATA: KanaGroup[] = [
-  {
-    title: "清音",
-    data: [
-      { char: "あ", romaji: "a" },
-      { char: "い", romaji: "i" },
-      { char: "う", romaji: "u" },
-      { char: "え", romaji: "e" },
-      { char: "お", romaji: "o" },
-      { char: "か", romaji: "ka" },
-      { char: "き", romaji: "ki" },
-      { char: "く", romaji: "ku" },
-      { char: "け", romaji: "ke" },
-      { char: "こ", romaji: "ko" },
-      { char: "さ", romaji: "sa" },
-      { char: "し", romaji: "shi" },
-      { char: "す", romaji: "su" },
-      { char: "せ", romaji: "se" },
-      { char: "そ", romaji: "so" },
-      { char: "た", romaji: "ta" },
-      { char: "ち", romaji: "chi" },
-      { char: "つ", romaji: "tsu" },
-      { char: "て", romaji: "te" },
-      { char: "と", romaji: "to" },
-      { char: "な", romaji: "na" },
-      { char: "に", romaji: "ni" },
-      { char: "ぬ", romaji: "nu" },
-      { char: "ね", romaji: "ne" },
-      { char: "の", romaji: "no" },
-      { char: "は", romaji: "ha" },
-      { char: "ひ", romaji: "hi" },
-      { char: "ふ", romaji: "fu" },
-      { char: "へ", romaji: "he" },
-      { char: "ほ", romaji: "ho" },
-      { char: "ま", romaji: "ma" },
-      { char: "み", romaji: "mi" },
-      { char: "む", romaji: "mu" },
-      { char: "め", romaji: "me" },
-      { char: "も", romaji: "mo" },
-      { char: "や", romaji: "ya" },
-      { char: "ゆ", romaji: "yu" },
-      { char: "よ", romaji: "yo" },
-      { char: "ら", romaji: "ra" },
-      { char: "り", romaji: "ri" },
-      { char: "る", romaji: "ru" },
-      { char: "れ", romaji: "re" },
-      { char: "ろ", romaji: "ro" },
-      { char: "わ", romaji: "wa" },
-      { char: "を", romaji: "wo" },
-      { char: "ん", romaji: "n" },
-    ],
-  },
-  {
-    title: "濁音",
-    data: [
-      { char: "が", romaji: "ga" },
-      { char: "ぎ", romaji: "gi" },
-      { char: "ぐ", romaji: "gu" },
-      { char: "げ", romaji: "ge" },
-      { char: "ご", romaji: "go" },
-      { char: "ざ", romaji: "za" },
-      { char: "じ", romaji: "ji" },
-      { char: "ず", romaji: "zu" },
-      { char: "ぜ", romaji: "ze" },
-      { char: "ぞ", romaji: "zo" },
-      { char: "だ", romaji: "da" },
-      { char: "ぢ", romaji: "ji" },
-      { char: "づ", romaji: "zu" },
-      { char: "で", romaji: "de" },
-      { char: "ど", romaji: "do" },
-      { char: "ば", romaji: "ba" },
-      { char: "び", romaji: "bi" },
-      { char: "ぶ", romaji: "bu" },
-      { char: "べ", romaji: "be" },
-      { char: "ぼ", romaji: "bo" },
-    ],
-  },
-  {
-    title: "半濁音",
-    data: [
-      { char: "ぱ", romaji: "pa" },
-      { char: "ぴ", romaji: "pi" },
-      { char: "ぷ", romaji: "pu" },
-      { char: "ぺ", romaji: "pe" },
-      { char: "ぽ", romaji: "po" },
-    ],
-  },
-  {
-    title: "拗音",
-    data: [
-      { char: "きゃ", romaji: "kya" },
-      { char: "きゅ", romaji: "kyu" },
-      { char: "きょ", romaji: "kyo" },
-      { char: "しゃ", romaji: "sha" },
-      { char: "しゅ", romaji: "shu" },
-      { char: "しょ", romaji: "sho" },
-      { char: "ちゃ", romaji: "cha" },
-      { char: "ちゅ", romaji: "chu" },
-      { char: "ちょ", romaji: "cho" },
-      { char: "にゃ", romaji: "nya" },
-      { char: "にゅ", romaji: "nyu" },
-      { char: "にょ", romaji: "nyo" },
-      { char: "ひゃ", romaji: "hya" },
-      { char: "ひゅ", romaji: "hyu" },
-      { char: "ひょ", romaji: "hyo" },
-      { char: "みゃ", romaji: "mya" },
-      { char: "みゅ", romaji: "myu" },
-      { char: "みょ", romaji: "myo" },
-      { char: "りゃ", romaji: "rya" },
-      { char: "りゅ", romaji: "ryu" },
-      { char: "りょ", romaji: "ryo" },
-      { char: "ぎゃ", romaji: "gya" },
-      { char: "ぎゅ", romaji: "gyu" },
-      { char: "ぎょ", romaji: "gyo" },
-      { char: "じゃ", romaji: "ja" },
-      { char: "じゅ", romaji: "ju" },
-      { char: "じょ", romaji: "jo" },
-      { char: "びゃ", romaji: "bya" },
-      { char: "びゅ", romaji: "byu" },
-      { char: "びょ", romaji: "byo" },
-      { char: "ぴゃ", romaji: "pya" },
-      { char: "ぴゅ", romaji: "pyu" },
-      { char: "ぴょ", romaji: "pyo" },
-    ],
-  },
-  {
-    title: "促音",
-    data: [{ char: "っ", romaji: "tt" }],
-  },
-];
+// ============================================================================
+// HELPERS
+// ============================================================================
 
-const KATAKANA_DATA: KanaGroup[] = [
-  {
-    title: "清音",
-    data: [
-      { char: "ア", romaji: "a" },
-      { char: "イ", romaji: "i" },
-      { char: "ウ", romaji: "u" },
-      { char: "エ", romaji: "e" },
-      { char: "オ", romaji: "o" },
-      { char: "カ", romaji: "ka" },
-      { char: "キ", romaji: "ki" },
-      { char: "ク", romaji: "ku" },
-      { char: "ケ", romaji: "ke" },
-      { char: "コ", romaji: "ko" },
-      { char: "サ", romaji: "sa" },
-      { char: "シ", romaji: "shi" },
-      { char: "ス", romaji: "su" },
-      { char: "セ", romaji: "se" },
-      { char: "ソ", romaji: "so" },
-      { char: "タ", romaji: "ta" },
-      { char: "チ", romaji: "chi" },
-      { char: "ツ", romaji: "tsu" },
-      { char: "テ", romaji: "te" },
-      { char: "ト", romaji: "to" },
-      { char: "ナ", romaji: "na" },
-      { char: "ニ", romaji: "ni" },
-      { char: "ヌ", romaji: "nu" },
-      { char: "ネ", romaji: "ne" },
-      { char: "ノ", romaji: "no" },
-      { char: "ハ", romaji: "ha" },
-      { char: "ヒ", romaji: "hi" },
-      { char: "フ", romaji: "fu" },
-      { char: "ヘ", romaji: "he" },
-      { char: "ホ", romaji: "ho" },
-      { char: "マ", romaji: "ma" },
-      { char: "ミ", romaji: "mi" },
-      { char: "ム", romaji: "mu" },
-      { char: "メ", romaji: "me" },
-      { char: "モ", romaji: "mo" },
-      { char: "ヤ", romaji: "ya" },
-      { char: "ユ", romaji: "yu" },
-      { char: "ヨ", romaji: "yo" },
-      { char: "ラ", romaji: "ra" },
-      { char: "リ", romaji: "ri" },
-      { char: "ル", romaji: "ru" },
-      { char: "レ", romaji: "re" },
-      { char: "ロ", romaji: "ro" },
-      { char: "ワ", romaji: "wa" },
-      { char: "ヲ", romaji: "wo" },
-      { char: "ン", romaji: "n" },
-    ],
-  },
-  {
-    title: "濁音",
-    data: [
-      { char: "ガ", romaji: "ga" },
-      { char: "ギ", romaji: "gi" },
-      { char: "グ", romaji: "gu" },
-      { char: "ゲ", romaji: "ge" },
-      { char: "ゴ", romaji: "go" },
-      { char: "ザ", romaji: "za" },
-      { char: "ジ", romaji: "ji" },
-      { char: "ズ", romaji: "zu" },
-      { char: "ゼ", romaji: "ze" },
-      { char: "ゾ", romaji: "zo" },
-      { char: "ダ", romaji: "da" },
-      { char: "ヂ", romaji: "ji" },
-      { char: "ヅ", romaji: "zu" },
-      { char: "デ", romaji: "de" },
-      { char: "ド", romaji: "do" },
-      { char: "バ", romaji: "ba" },
-      { char: "ビ", romaji: "bi" },
-      { char: "ブ", romaji: "bu" },
-      { char: "ベ", romaji: "be" },
-      { char: "ボ", romaji: "bo" },
-    ],
-  },
-  {
-    title: "半濁音",
-    data: [
-      { char: "パ", romaji: "pa" },
-      { char: "ピ", romaji: "pi" },
-      { char: "プ", romaji: "pu" },
-      { char: "ペ", romaji: "pe" },
-      { char: "ポ", romaji: "po" },
-    ],
-  },
-  {
-    title: "拗音",
-    data: [
-      { char: "キャ", romaji: "kya" },
-      { char: "キュ", romaji: "kyu" },
-      { char: "キョ", romaji: "kyo" },
-      { char: "シャ", romaji: "sha" },
-      { char: "シュ", romaji: "shu" },
-      { char: "ショ", romaji: "sho" },
-      { char: "チャ", romaji: "cha" },
-      { char: "チュ", romaji: "chu" },
-      { char: "チョ", romaji: "cho" },
-      { char: "ニャ", romaji: "nya" },
-      { char: "ニュ", romaji: "nyu" },
-      { char: "ニョ", romaji: "nyo" },
-      { char: "ヒャ", romaji: "hya" },
-      { char: "ヒュ", romaji: "hyu" },
-      { char: "ヒョ", romaji: "hyo" },
-      { char: "ミャ", romaji: "mya" },
-      { char: "ミュ", romaji: "myu" },
-      { char: "ミョ", romaji: "myo" },
-      { char: "リャ", romaji: "rya" },
-      { char: "リュ", romaji: "ryu" },
-      { char: "リョ", romaji: "ryo" },
-      { char: "ギャ", romaji: "gya" },
-      { char: "ギュ", romaji: "gyu" },
-      { char: "ギョ", romaji: "gyo" },
-      { char: "ジャ", romaji: "ja" },
-      { char: "ジュ", romaji: "ju" },
-      { char: "ジョ", romaji: "jo" },
-      { char: "ビャ", romaji: "bya" },
-      { char: "ビュ", romaji: "byu" },
-      { char: "ビョ", romaji: "byo" },
-      { char: "ピャ", romaji: "pya" },
-      { char: "ピュ", romaji: "pyu" },
-      { char: "ピョ", romaji: "pyo" },
-    ],
-  },
-  {
-    title: "促音",
-    data: [{ char: "ッ", romaji: "tt" }],
-  },
-];
-
-// Grid de 3 columnas
-const PADDING = 20;
-const GAP = 12;
-const NUM_COLUMNS = 3;
-const CARD_WIDTH =
-  (width - PADDING * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
-
-export default function KanaScreen() {
-  const [mode, setMode] = useState<"hiragana" | "katakana">("hiragana");
-  const router = useRouter();
-
-  // Animación del selector
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const selectorWidth = (width - PADDING * 2 - 8) / 2; // Ancho de cada mitad (restando padding del contenedor)
-
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: mode === "hiragana" ? 0 : selectorWidth,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 12,
-    }).start();
-  }, [mode]);
-
-  const activeData = mode === "hiragana" ? HIRAGANA_DATA : KATAKANA_DATA;
-
-  // Colores dinámicos según el modo
-  const cardBg = mode === "hiragana" ? HIRAGANA_CARD_BG : KATAKANA_CARD_BG;
-  const cardText =
-    mode === "hiragana" ? HIRAGANA_CARD_TEXT : KATAKANA_CARD_TEXT;
-  const cardRipple = mode === "hiragana" ? HIRAGANA_RIPPLE : KATAKANA_RIPPLE;
-
-  const handleCharPress = (char: string) => {
-    if (char) {
-      router.push(`/modules/kana/practice/${encodeURIComponent(char)}`);
+const getKanaColors = (mode: 'hiragana' | 'katakana') => {
+    if (mode === 'hiragana') {
+        return {
+            main: colors.levels.n5.primary,
+            bg: colors.levels.n5.light,
+        };
     }
-  };
+    return {
+        main: colors.levels.n4.primary,
+        bg: colors.levels.n4.light,
+    };
+};
 
-  return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-      edges={["top"]}
-    >
-      <StatusBar style="dark" />
-      <Stack.Screen options={{ headerShown: false }} />
+// ============================================================================
+// DATOS - 119 CARACTERES ORGANIZADOS POR CATEGORÍAS
+// ============================================================================
 
-      {/* Selector Hiragana/Katakana - Con animación */}
-      <View
-        style={{ paddingHorizontal: PADDING, paddingTop: 10, marginBottom: 10 }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            backgroundColor: "#F3F4F6",
-            borderRadius: 10,
-            padding: 4,
-            position: "relative",
-          }}
-        >
-          {/* Selector animado (fondo blanco que se desliza) */}
-          <Animated.View
-            style={{
-              position: "absolute",
-              top: 4,
-              bottom: 4,
-              left: 4,
-              width: "50%",
-              backgroundColor: "#FFFFFF",
-              borderRadius: 8,
-              transform: [{ translateX: slideAnim }],
-              // Sombra sutil para el selector
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-            }}
-          />
+const HIRAGANA = {
+    基本: [
+        ['あ', 'い', 'う'],
+        ['え', 'お', 'か'],
+        ['き', 'く', 'け'],
+        ['こ', 'さ', 'し'],
+        ['す', 'せ', 'そ'],
+        ['た', 'ち', 'つ'],
+        ['て', 'と', 'な'],
+        ['に', 'ぬ', 'ね'],
+        ['の', 'は', 'ひ'],
+        ['ふ', 'へ', 'ほ'],
+        ['ま', 'み', 'む'],
+        ['め', 'も', 'や'],
+        ['ゆ', 'よ', 'ら'],
+        ['り', 'る', 'れ'],
+        ['ろ', 'わ', 'を'],
+        ['ん', '', ''],
+    ],
+    濁音: [
+        ['が', 'ぎ', 'ぐ'],
+        ['げ', 'ご', 'ざ'],
+        ['じ', 'ず', 'ぜ'],
+        ['ぞ', 'だ', 'ぢ'],
+        ['づ', 'で', 'ど'],
+        ['ば', 'び', 'ぶ'],
+        ['べ', 'ぼ', ''],
+    ],
+    半濁音: [
+        ['ぱ', 'ぴ', 'ぷ'],
+        ['ぺ', 'ぽ', ''],
+    ],
+    拗音: [
+        ['きゃ', 'きゅ', 'きょ'],
+        ['しゃ', 'しゅ', 'しょ'],
+        ['ちゃ', 'ちゅ', 'ちょ'],
+        ['にゃ', 'にゅ', 'にょ'],
+        ['ひゃ', 'ひゅ', 'ひょ'],
+        ['みゃ', 'みゅ', 'みょ'],
+        ['りゃ', 'りゅ', 'りょ'],
+    ],
+    拗濁音: [
+        ['ぎゃ', 'ぎゅ', 'ぎょ'],
+        ['じゃ', 'じゅ', 'じょ'],
+        ['びゃ', 'びゅ', 'びょ'],
+        ['ぴゃ', 'ぴゅ', 'ぴょ'],
+    ],
+};
 
-          {/* Botón Hiragana */}
-          <Pressable
-            onPress={() => setMode("hiragana")}
-            style={{ flex: 1, zIndex: 1 }}
-          >
-            <View
-              style={{
-                paddingVertical: 8,
-                alignItems: "center",
-                borderRadius: 8,
-              }}
+const KATAKANA = {
+    基本: [
+        ['ア', 'イ', 'ウ'],
+        ['エ', 'オ', 'カ'],
+        ['キ', 'ク', 'ケ'],
+        ['コ', 'サ', 'シ'],
+        ['ス', 'セ', 'ソ'],
+        ['タ', 'チ', 'ツ'],
+        ['テ', 'ト', 'ナ'],
+        ['ニ', 'ヌ', 'ネ'],
+        ['ノ', 'ハ', 'ヒ'],
+        ['フ', 'ヘ', 'ホ'],
+        ['マ', 'ミ', 'ム'],
+        ['メ', 'モ', 'ヤ'],
+        ['ユ', 'ヨ', 'ラ'],
+        ['リ', 'ル', 'レ'],
+        ['ロ', 'ワ', 'ヲ'],
+        ['ン', '', ''],
+    ],
+    濁音: [
+        ['ガ', 'ギ', 'グ'],
+        ['ゲ', 'ゴ', 'ザ'],
+        ['ジ', 'ズ', 'ゼ'],
+        ['ゾ', 'ダ', 'ヂ'],
+        ['ヅ', 'デ', 'ド'],
+        ['バ', 'ビ', 'ブ'],
+        ['ベ', 'ボ', ''],
+    ],
+    半濁音: [
+        ['パ', 'ピ', 'プ'],
+        ['ペ', 'ポ', ''],
+    ],
+    拗音: [
+        ['キャ', 'キュ', 'キョ'],
+        ['シャ', 'シュ', 'ショ'],
+        ['チャ', 'チュ', 'チョ'],
+        ['ニャ', 'ニュ', 'ニョ'],
+        ['ヒャ', 'ヒュ', 'ヒョ'],
+        ['ミャ', 'ミュ', 'ミョ'],
+        ['リャ', 'リュ', 'リョ'],
+    ],
+    拗濁音: [
+        ['ギャ', 'ギュ', 'ギョ'],
+        ['ジャ', 'ジュ', 'ジョ'],
+        ['ビャ', 'ビュ', 'ビョ'],
+        ['ピャ', 'ピュ', 'ピョ'],
+    ],
+};
+
+// ============================================================================
+// COMPONENTES
+// ============================================================================
+
+const ModeSelector = ({
+    mode,
+    onSelect,
+}: {
+    mode: 'hiragana' | 'katakana';
+    onSelect: (mode: 'hiragana' | 'katakana') => void;
+}) => {
+    const selectorWidth = (width - spacing.screen * 2 - spacing.xs * 2) / 2;
+    const hiraganaColors = getKanaColors('hiragana');
+    const katakanaColors = getKanaColors('katakana');
+
+    // Container Transform - usando Reanimated
+    const translateX = useSharedValue(mode === 'hiragana' ? 0 : selectorWidth);
+
+    useEffect(() => {
+        const targetX = mode === 'hiragana' ? 0 : selectorWidth;
+        translateX.value = withTiming(targetX, {
+            duration: materialDuration.short3,
+            easing: materialEasing.emphasized,
+        });
+    }, [mode, selectorWidth]);
+
+    const animatedIndicatorStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: translateX.value }],
+    }));
+
+    const handleSelect = (newMode: 'hiragana' | 'katakana') => {
+        onSelect(newMode);
+    };
+
+    const indicatorColor = mode === 'hiragana' ? hiraganaColors.main : katakanaColors.main;
+
+    return (
+        <View style={styles.selector}>
+            <Animated.View
+                style={[
+                    styles.selectorIndicator,
+                    {
+                        width: selectorWidth,
+                        backgroundColor: indicatorColor,
+                    },
+                    animatedIndicatorStyle,
+                ]}
+            />
+
+            <Pressable
+                onPress={() => handleSelect('hiragana')}
+                style={styles.selectorOption}
             >
-              <Text
-                style={{
-                  fontFamily: "NotoSansJP_700Bold",
-                  fontSize: 18,
-                  color: mode === "hiragana" ? HIRAGANA_CARD_TEXT : "#9CA3AF",
-                }}
-              >
-                ひらがな
-              </Text>
-            </View>
-          </Pressable>
+                <Text
+                    style={[
+                        styles.selectorText,
+                        mode === 'hiragana' && styles.selectorTextActive,
+                    ]}
+                >
+                    ひらがな
+                </Text>
+            </Pressable>
 
-          {/* Botón Katakana */}
-          <Pressable
-            onPress={() => setMode("katakana")}
-            style={{ flex: 1, zIndex: 1 }}
-          >
-            <View
-              style={{
-                paddingVertical: 8,
-                alignItems: "center",
-                borderRadius: 8,
-              }}
+            <Pressable
+                onPress={() => handleSelect('katakana')}
+                style={styles.selectorOption}
             >
-              <Text
-                style={{
-                  fontFamily: "NotoSansJP_700Bold",
-                  fontSize: 18,
-                  color: mode === "katakana" ? KATAKANA_CARD_TEXT : "#9CA3AF",
-                }}
-              >
-                カタカナ
-              </Text>
-            </View>
-          </Pressable>
+                <Text
+                    style={[
+                        styles.selectorText,
+                        mode === 'katakana' && styles.selectorTextActive,
+                    ]}
+                >
+                    カタカナ
+                </Text>
+            </Pressable>
         </View>
-      </View>
+    );
+};
 
-      {/* Grid de Kana */}
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: PADDING,
-          paddingBottom: 40,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {activeData.map((group, groupIndex) => (
-          <View key={groupIndex} style={{ marginBottom: 24 }}>
-            {/* Título del grupo */}
-            <Text
-              style={{
-                fontFamily: "NotoSansJP_400Regular",
-                fontSize: 18,
-                color: "#6B7280",
-                marginBottom: 12,
-              }}
+const CategorySection = ({
+    title,
+    rows,
+    kanaColors,
+    onCharPress,
+    startIndex,
+}: {
+    title: string;
+    rows: string[][];
+    kanaColors: ReturnType<typeof getKanaColors>;
+    onCharPress: (char: string) => void;
+    startIndex: number;
+}) => {
+    return (
+        <View style={styles.categorySection}>
+            <Animated.View
+                entering={listItemEnter(startIndex)}
+                style={styles.categoryHeader}
             >
-              {group.title}
-            </Text>
+                <Text style={styles.categoryTitle}>{title}</Text>
+            </Animated.View>
+            {rows.map((row, rowIndex) => (
+                <Animated.View
+                    key={`${title}-row-${rowIndex}`}
+                    entering={listItemEnter(startIndex + rowIndex + 1)}
+                    style={styles.kanaRow}
+                >
+                    {row.map((char, colIndex) => (
+                        <KanaCell
+                            key={`${title}-${rowIndex}-${colIndex}`}
+                            char={char}
+                            kanaColors={kanaColors}
+                            onPress={() => onCharPress(char)}
+                        />
+                    ))}
+                </Animated.View>
+            ))}
+        </View>
+    );
+};
 
-            {/* Grid 3 columnas */}
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-              {group.data.map((kana, index) => (
-                <KanaCard
-                  key={index}
-                  kana={kana}
-                  cardBg={cardBg}
-                  cardText={cardText}
-                  cardRipple={cardRipple}
-                  onPress={() => handleCharPress(kana.char)}
-                />
-              ))}
+const KanaCell = ({
+    char,
+    kanaColors,
+    onPress,
+}: {
+    char: string;
+    kanaColors: ReturnType<typeof getKanaColors>;
+    onPress: () => void;
+}) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
+
+    const handlePressIn = () => {
+        if (char) {
+            scale.value = pressScale(0.92);
+        }
+    };
+
+    const handlePressOut = () => {
+        scale.value = releaseScale();
+    };
+
+    if (!char) {
+        return <View style={styles.kanaCell} />;
+    }
+
+    return (
+        <View style={styles.kanaCell}>
+            <Animated.View style={animatedStyle}>
+                <Pressable
+                    onPress={onPress}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    style={styles.kanaCellInner}
+                >
+                    <Text style={[styles.kanaChar, { color: kanaColors.main }]}>
+                        {char}
+                    </Text>
+                </Pressable>
+            </Animated.View>
+        </View>
+    );
+};
+
+// ============================================================================
+// PANTALLA
+// ============================================================================
+
+export default function KanaModule() {
+    const router = useRouter();
+    const [mode, setMode] = useState<'hiragana' | 'katakana'>('hiragana');
+
+    const data = mode === 'hiragana' ? HIRAGANA : KATAKANA;
+    const kanaColors = getKanaColors(mode);
+
+    const handleCharPress = (char: string) => {
+        if (char) {
+            router.push(`/modules/kana/practice?char=${encodeURIComponent(char)}&mode=${mode}` as any);
+        }
+    };
+
+    const categories = Object.entries(data);
+    let cumulativeIndex = 0;
+
+    return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar style="light" />
+            <Stack.Screen options={{ headerShown: false }} />
+
+            <View style={styles.content}>
+                {/* Selector */}
+                <View style={styles.selectorContainer}>
+                    <ModeSelector mode={mode} onSelect={setMode} />
+                </View>
+
+                {/* Grid de caracteres organizados por categorías */}
+                <ScrollView
+                    contentContainerStyle={styles.gridContainer}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {categories.map(([categoryName, rows]) => {
+                        const startIndex = cumulativeIndex;
+                        cumulativeIndex += rows.length + 1;
+                        return (
+                            <CategorySection
+                                key={`${mode}-${categoryName}`}
+                                title={categoryName}
+                                rows={rows}
+                                kanaColors={kanaColors}
+                                onCharPress={handleCharPress}
+                                startIndex={startIndex}
+                            />
+                        );
+                    })}
+                </ScrollView>
             </View>
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
-  );
+        </SafeAreaView>
+    );
 }
 
-type KanaCardProps = {
-  kana: KanaChar;
-  cardBg: string;
-  cardText: string;
-  cardRipple: string;
-  onPress: () => void;
-};
+// ============================================================================
+// ESTILOS
+// ============================================================================
 
-const KanaCard = ({
-  kana,
-  cardBg,
-  cardText,
-  cardRipple,
-  onPress,
-}: KanaCardProps) => {
-  if (!kana.char) return <View style={{ width: CARD_WIDTH }} />;
+const CELL_SIZE = (width - spacing.screen * 2 - spacing.md * 2) / 3;
 
-  return (
-    <Surface
-      style={{
-        width: CARD_WIDTH,
-        aspectRatio: 1,
-        borderRadius: 16,
-        backgroundColor: cardBg,
-        overflow: "hidden",
-      }}
-      elevation={0}
-      mode="flat"
-    >
-      <TouchableRipple
-        onPress={onPress}
-        rippleColor={cardRipple}
-        style={{ flex: 1 }}
-      >
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            paddingVertical: 8,
-          }}
-        >
-          {/* Carácter principal */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 32,
-              color: cardText,
-              includeFontPadding: false,
-              lineHeight: 40,
-            }}
-          >
-            {kana.char}
-          </Text>
-          {/* Romaji debajo */}
-          <Text
-            style={{
-              fontFamily: "NotoSansJP_400Regular",
-              fontSize: 12,
-              color: cardText,
-              opacity: 0.6,
-              marginTop: 2,
-              includeFontPadding: false,
-            }}
-          >
-            {kana.romaji}
-          </Text>
-        </View>
-      </TouchableRipple>
-    </Surface>
-  );
-};
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.bg,
+    },
+    content: {
+        flex: 1,
+    },
+
+    // Selector
+    selectorContainer: {
+        paddingHorizontal: spacing.screen,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.lg,
+    },
+    selector: {
+        flexDirection: 'row',
+        backgroundColor: colors.surface,
+        borderRadius: radius.md,
+        padding: spacing.xs,
+        position: 'relative',
+    },
+    selectorIndicator: {
+        position: 'absolute',
+        top: spacing.xs,
+        left: spacing.xs,
+        height: 52,
+        borderRadius: radius.sm,
+    },
+    selectorOption: {
+        flex: 1,
+        height: 52,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
+    },
+    selectorText: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 14,
+        color: colors.text.tertiary,
+        includeFontPadding: false,
+    },
+    selectorTextActive: {
+        color: colors.text.primary,
+    },
+
+    // Grid
+    gridContainer: {
+        paddingHorizontal: spacing.screen,
+        paddingBottom: spacing.xxl,
+    },
+
+    // Categorías
+    categorySection: {
+        marginBottom: spacing.xl,
+    },
+    categoryHeader: {
+        marginBottom: spacing.md,
+    },
+    categoryTitle: {
+        fontFamily: 'NotoSansJP_700Bold',
+        fontSize: 13,
+        color: colors.text.secondary,
+        includeFontPadding: false,
+        letterSpacing: 0.5,
+    },
+
+    // Celdas
+    kanaRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginBottom: spacing.md,
+    },
+    kanaCell: {
+        width: CELL_SIZE,
+        height: CELL_SIZE,
+    },
+    kanaCellInner: {
+        width: CELL_SIZE,
+        height: CELL_SIZE,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    kanaChar: {
+        fontFamily: 'NotoSansJP_400Regular',
+        fontSize: CELL_SIZE * 0.4,
+        includeFontPadding: false,
+    },
+});

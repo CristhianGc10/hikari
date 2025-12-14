@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   },
   writingCard: {
     borderRadius: 32,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     // overflow: "hidden", // <--- ELIMINADO para que las hojas y efectos salgan del borde
   },
   canvasContainer: {
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
   buttonCard: {
     height: 90,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     overflow: "hidden",
   },
   buttonPressable: {
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   audioButton: {
     height: 90,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#1E2030",
     overflow: "hidden",
   },
   audioButtonPressable: {

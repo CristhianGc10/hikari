@@ -1,369 +1,411 @@
 // app/levels/[id].tsx
-import React from 'react';
-import { View, ScrollView, Dimensions, Platform } from 'react-native';
-import { Text, Surface, TouchableRipple } from 'react-native-paper';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { Check, Play, Lock } from 'lucide-react-native';
+import React from "react";
+import { View, Pressable, StyleSheet, Dimensions } from "react-native";
+import { Text } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import {
+  PenTool,
+  BookOpen,
+  BookText,
+  Languages,
+  Headphones,
+  FileText,
+} from "lucide-react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+} from "react-native-reanimated";
+import { staggeredCardEnter, headerEnter, pressScale, releaseScale } from "@/src/core/animations";
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
-// Colores
-const LEVEL_COLORS: Record<string, { color: string; colorLight: string; kanji: string }> = {
-  n5: { color: '#F5A238', colorLight: '#FEF7ED', kanji: '始' },
-  n4: { color: '#76BF54', colorLight: '#F3FAF0', kanji: '進' },
-  n3: { color: '#E1444B', colorLight: '#FDF2F2', kanji: '道' },
-  n2: { color: '#4387C8', colorLight: '#EFF6FC', kanji: '翔' },
-  n1: { color: '#9056A2', colorLight: '#F8F3FA', kanji: '極' },
-};
-
-// DATOS
-const levelsData: Record<string, any> = {
-  n5: {
-    title: 'N5',
-    subtitle: '初級',
-    modules: [
-      { id: 'm1', type: 'kana', title: '仮名', sub: 'Hiragana y Katakana', progress: 1.0, kanji: '字' },
-      { id: 'm2', type: 'vocab', title: '語彙', sub: '800 palabras esenciales', progress: 0.0, kanji: '言' },
-      { id: 'm3', type: 'grammar', title: '文法', sub: 'Estructuras básicas', progress: 0.0, kanji: '文' },
-      { id: 'm4', type: 'kanji', title: '漢字', sub: '100 caracteres', progress: 0.0, kanji: '字' },
-      { id: 'm5', type: 'listening', title: '聴解', sub: 'Comprensión auditiva', progress: 0.0, kanji: '耳' },
-      { id: 'm6', type: 'reading', title: '読解', sub: 'Textos cortos', progress: 0.0, kanji: '読' },
-      { id: 'm7', type: 'practice', title: '練習', sub: 'Exámenes de prueba', progress: 0.0, kanji: '習' },
-    ]
+const colors = {
+  bg: "#151621",
+  surface: "#1E2030",
+  surfaceLight: "#262940",
+  text: {
+    primary: "#FFFFFF",
+    secondary: "#8F92A8",
+    tertiary: "#5D6080",
   },
-  n4: {
-    title: 'N4',
-    subtitle: '初中級',
-    modules: [
-      { id: 'm1', type: 'vocab', title: '語彙', sub: '1,500 palabras', progress: 0.0, kanji: '言' },
-      { id: 'm2', type: 'grammar', title: '文法', sub: 'Formas intermedias y conjugaciones', progress: 0.0, kanji: '文' },
-      { id: 'm3', type: 'kanji', title: '漢字', sub: '300 caracteres', progress: 0.0, kanji: '字' },
-      { id: 'm4', type: 'listening', title: '聴解', sub: 'Diálogos cotidianos', progress: 0.0, kanji: '耳' },
-      { id: 'm5', type: 'reading', title: '読解', sub: 'Textos informativos', progress: 0.0, kanji: '読' },
-      { id: 'm6', type: 'speaking', title: '会話', sub: 'Conversación básica', progress: 0.0, kanji: '話' },
-      { id: 'm7', type: 'practice', title: '練習', sub: 'Exámenes de prueba', progress: 0.0, kanji: '習' },
-    ]
-  },
-  n3: {
-    title: 'N3',
-    subtitle: '中級',
-    modules: [
-      { id: 'm1', type: 'vocab', title: '語彙', sub: '3,750 palabras', progress: 0.0, kanji: '言' },
-      { id: 'm2', type: 'grammar', title: '文法', sub: 'Estructuras complejas', progress: 0.0, kanji: '文' },
-      { id: 'm3', type: 'kanji', title: '漢字', sub: '650 caracteres', progress: 0.0, kanji: '字' },
-      { id: 'm4', type: 'listening', title: '聴解', sub: 'Noticias y entrevistas', progress: 0.0, kanji: '耳' },
-      { id: 'm5', type: 'reading', title: '読解', sub: 'Artículos y ensayos', progress: 0.0, kanji: '読' },
-      { id: 'm6', type: 'speaking', title: '会話', sub: 'Expresión de opiniones', progress: 0.0, kanji: '話' },
-      { id: 'm7', type: 'practice', title: '練習', sub: 'Exámenes de prueba', progress: 0.0, kanji: '習' },
-    ]
-  },
-  n2: {
-    title: 'N2',
-    subtitle: '中上級',
-    modules: [
-      { id: 'm1', type: 'vocab', title: '語彙', sub: '6,000 palabras', progress: 0.0, kanji: '言' },
-      { id: 'm2', type: 'grammar', title: '文法', sub: 'Expresiones formales', progress: 0.0, kanji: '文' },
-      { id: 'm3', type: 'kanji', title: '漢字', sub: '1,000 caracteres', progress: 0.0, kanji: '字' },
-      { id: 'm4', type: 'listening', title: '聴解', sub: 'Conferencias y debates', progress: 0.0, kanji: '耳' },
-      { id: 'm5', type: 'reading', title: '読解', sub: 'Textos profesionales', progress: 0.0, kanji: '読' },
-      { id: 'm6', type: 'writing', title: '作文', sub: 'Composición formal', progress: 0.0, kanji: '書' },
-      { id: 'm7', type: 'practice', title: '練習', sub: 'Exámenes de prueba', progress: 0.0, kanji: '習' },
-    ]
-  },
-  n1: {
-    title: 'N1',
-    subtitle: '上級',
-    modules: [
-      { id: 'm1', type: 'vocab', title: '語彙', sub: '10,000+ palabras', progress: 0.0, kanji: '言' },
-      { id: 'm2', type: 'grammar', title: '文法', sub: 'Expresiones avanzadas', progress: 0.0, kanji: '文' },
-      { id: 'm3', type: 'kanji', title: '漢字', sub: '2,000+ caracteres', progress: 0.0, kanji: '字' },
-      { id: 'm4', type: 'listening', title: '聴解', sub: 'Contenido nativo', progress: 0.0, kanji: '耳' },
-      { id: 'm5', type: 'reading', title: '読解', sub: 'Literatura y prensa', progress: 0.0, kanji: '読' },
-      { id: 'm6', type: 'writing', title: '作文', sub: 'Redacción avanzada', progress: 0.0, kanji: '書' },
-      { id: 'm7', type: 'practice', title: '練習', sub: 'Exámenes de prueba', progress: 0.0, kanji: '習' },
-    ]
+  levels: {
+    n5: { primary: "#F0A55A", light: "rgba(240, 165, 90, 0.12)" },
+    n4: { primary: "#5AC78B", light: "rgba(90, 199, 139, 0.12)" },
+    n3: { primary: "#E86B8A", light: "rgba(232, 107, 138, 0.12)" },
+    n2: { primary: "#5A9FE8", light: "rgba(90, 159, 232, 0.12)" },
+    n1: { primary: "#A87DE8", light: "rgba(168, 125, 232, 0.12)" },
   },
 };
 
-export default function LevelDetailScreen() {
-  const { id } = useLocalSearchParams();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  
-  const levelId = typeof id === 'string' ? id : 'n5';
-  const data = levelsData[levelId] || levelsData['n5'];
-  const colors = LEVEL_COLORS[levelId] || LEVEL_COLORS['n5'];
+const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, screen: 20 };
+const radius = { sm: 10, md: 14, lg: 18, xl: 28, full: 9999 };
 
-  const handleModulePress = (module: any) => {
-    switch (module.type) {
-      case 'kana':
-        router.push('/modules/kana');
-        break;
-      case 'vocab':
-        console.log("Navegando a Vocabulario");
-        router.push('/modules/vocab');
-        break;
-      default:
-        console.warn(`Ruta para ${module.type} no definida aún`);
+const LEVEL_INFO = {
+  n5: { kanji: "始", name: "初級", subtitle: "基礎レベル" },
+  n4: { kanji: "進", name: "初中級", subtitle: "基本会話" },
+  n3: { kanji: "道", name: "中級", subtitle: "日常会話" },
+  n2: { kanji: "翔", name: "中上級", subtitle: "ビジネス" },
+  n1: { kanji: "極", name: "上級", subtitle: "ネイティブ" },
+} as const;
+
+const MODULES = [
+  { id: "kana", title: "仮名", subtitle: "基本文字", detail: "104文字", progress: 0.65, icon: PenTool, unlocked: true, route: "/modules/kana" },
+  { id: "vocab", title: "語彙", subtitle: "単語と表現", detail: "800語", progress: 0.23, icon: BookOpen, unlocked: true, route: "/modules/vocab" },
+  { id: "grammar", title: "文法", subtitle: "文の構造", detail: "45文型", progress: 0, icon: BookText, unlocked: false, route: "/modules/grammar" },
+  { id: "kanji", title: "漢字", subtitle: "漢字学習", detail: "103字", progress: 0, icon: Languages, unlocked: false, route: "/modules/kanji" },
+  { id: "listening", title: "聴解", subtitle: "リスニング", detail: "30問題", progress: 0, icon: Headphones, unlocked: false, route: "/modules/listening" },
+  { id: "reading", title: "読解", subtitle: "読み取り", detail: "25課題", progress: 0, icon: FileText, unlocked: false, route: "/modules/reading" },
+] as const;
+
+const ModuleCard = ({
+  module,
+  index,
+  levelColor,
+  onPress,
+}: {
+  module: (typeof MODULES)[number];
+  index: number;
+  levelColor: { primary: string; light: string };
+  onPress: () => void;
+}) => {
+  const Icon = module.icon;
+  const isLocked = !module.unlocked;
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => {
+    if (!isLocked) {
+      scale.value = pressScale(0.96);
     }
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="dark" />
-
-      {/* Header fijo */}
-      <View style={{ 
-        paddingTop: insets.top + 2,
-        paddingHorizontal: 20,
-        paddingBottom: 2,
-        backgroundColor: '#FFFFFF',
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'NotoSansJP_700Bold', fontSize: 22, color: colors.color }}>
-            {data.title}
-          </Text>
-          <Text style={{ fontFamily: 'NotoSansJP_400Regular', fontSize: 16, color: '#6B7280', marginLeft: 8 }}>
-            {data.subtitle}
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 20 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View>
-          {data.modules.map((module: any, index: number) => {
-            const previousModule = index > 0 ? data.modules[index - 1] : null;
-            const isUnlocked = index === 0 || (previousModule && previousModule.progress >= 1.0) || module.progress > 0;
-
-            return (
-              <PathNode
-                key={module.id}
-                module={module}
-                index={index}
-                isLast={index === data.modules.length - 1}
-                themeColor={colors.color}
-                colorLight={colors.colorLight}
-                onPress={() => handleModulePress(module)}
-                isUnlocked={isUnlocked}
-              />
-            );
-          })}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-type PathNodeProps = {
-  module: any;
-  index: number;
-  isLast: boolean;
-  themeColor: string;
-  colorLight: string;
-  onPress: () => void;
-  isUnlocked: boolean;
-};
-
-const PathNode = ({ module, index, isLast, themeColor, colorLight, onPress, isUnlocked }: PathNodeProps) => {
-  const isCompleted = module.progress >= 1.0;
-  const isInProgress = module.progress > 0 && module.progress < 1.0;
-  const isLocked = !isUnlocked;
-  const isCurrent = isUnlocked && !isCompleted && !isInProgress;
-
-  const isLeft = index % 2 === 0;
-  const nodeSize = 56;
-  const lineWidth = 3;
+  const handlePressOut = () => {
+    scale.value = releaseScale();
+  };
 
   return (
-    // CAMBIO 1: Quitamos "alignItems: 'flex-start'" para que las columnas se estiren
-    <View style={{ flexDirection: 'row' }}>
-      {/* Lado izquierdo */}
-      <View style={{ flex: 1, alignItems: 'flex-end', paddingRight: 16 }}>
-        {isLeft && (
-          <ModuleCard
-            module={module}
-            themeColor={themeColor}
-            colorLight={colorLight}
-            isCompleted={isCompleted}
-            isInProgress={isInProgress}
-            isLocked={isLocked}
-            onPress={onPress}
-          />
-        )}
-      </View>
-
-      {/* Centro - Línea y nodo */}
-      {/* Esta columna ahora se estira a la altura de la tarjeta (140px) */}
-      <View style={{ alignItems: 'center', width: nodeSize, justifyContent: 'flex-start' }}>
-        {/* Nodo circular (siempre arriba) */}
-        <View
-          style={{
-            width: nodeSize,
-            height: nodeSize,
-            borderRadius: nodeSize / 2,
-            backgroundColor: isCompleted ? themeColor : (isInProgress || isCurrent) ? themeColor : '#F3F4F6',
-            borderWidth: isInProgress || isCurrent ? 3 : 0,
-            borderColor: themeColor,
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2, // Aseguramos que el círculo esté visualmente sobre la línea
-          }}
-        >
-          {isCompleted ? (
-            <Check size={28} color="#FFFFFF" strokeWidth={3} />
-          ) : (isInProgress || isCurrent) ? (
-            <Play size={22} color={isInProgress ? themeColor : "#FFFFFF"} strokeWidth={2.5} fill={isInProgress ? themeColor : "#FFFFFF"} />
-          ) : (
-            <Lock size={20} color="#9CA3AF" strokeWidth={2} />
-          )}
-        </View>
-
-        {/* Línea conectora */}
-        {!isLast && (
-          <View
-            style={{
-              width: lineWidth,
-              // CAMBIO 2: Usamos flex: 1 en lugar de altura fija para que llene el espacio
-              flex: 1, 
-              backgroundColor: isCompleted ? themeColor : '#E5E7EB',
-              // CAMBIO 3: Eliminamos marginVertical para que toque el círculo
-              marginVertical: 6,
-            }}
-          />
-        )}
-      </View>
-
-      {/* Lado derecho */}
-      <View style={{ flex: 1, alignItems: 'flex-start', paddingLeft: 16 }}>
-        {!isLeft && (
-          <ModuleCard
-            module={module}
-            themeColor={themeColor}
-            colorLight={colorLight}
-            isCompleted={isCompleted}
-            isInProgress={isInProgress}
-            isLocked={isLocked}
-            onPress={onPress}
-          />
-        )}
-      </View>
-    </View>
-  );
-};
-
-type ModuleCardProps = {
-  module: any;
-  themeColor: string;
-  colorLight: string;
-  isCompleted: boolean;
-  isInProgress: boolean;
-  isLocked: boolean;
-  onPress: () => void;
-};
-
-// --- MODULO CON SIMETRÍA AJUSTADA ---
-const ModuleCard = ({ module, themeColor, colorLight, isCompleted, isInProgress, isLocked, onPress }: ModuleCardProps) => {
-  const cardWidth = (width - 40 - 56 - 32) / 2;
-  const isAccessible = !isLocked;
-  
-  // Padding vertical exacto para ambos extremos
-  const verticalPadding = 16; 
-
-  return (
-    <Surface
-      style={{
-        width: cardWidth,
-        height: 140, 
-        borderRadius: 20,
-        backgroundColor: (isCompleted || isInProgress) ? colorLight : '#F9FAFB',
-        overflow: 'hidden',
-        opacity: isLocked ? 0.6 : 1,
-      }}
-      elevation={0}
-      mode="flat"
+    <Animated.View
+      entering={staggeredCardEnter(index, 100, 50)}
+      style={styles.moduleWrapper}
     >
-      <TouchableRipple 
-        onPress={onPress} 
-        rippleColor={themeColor + '20'} 
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         disabled={isLocked}
-        style={{ flex: 1 }}
+        style={styles.moduleWrapper}
       >
-        <View style={{ 
-          flex: 1,
-          paddingHorizontal: 14,
-          paddingTop: verticalPadding,    
-          paddingBottom: verticalPadding, 
-          justifyContent: 'space-between' 
-        }}>
-          {/* Kanji decorativo (absoluto) */}
-          <View style={{ position: 'absolute', right: 6, top: 6 }}>
+        <Animated.View
+          style={[
+            styles.moduleCard,
+            {
+              backgroundColor: colors.surface,
+              opacity: isLocked ? 0.35 : 1,
+            },
+            animatedStyle,
+          ]}
+        >
+          <View style={styles.cardTop}>
+            <Icon
+              size={32}
+              color={isLocked ? colors.text.tertiary : levelColor.primary}
+              strokeWidth={2.2}
+            />
             <Text
-              style={{
-                fontSize: 36,
-                lineHeight: 36,
-                color: (isCompleted || isInProgress || isAccessible) ? themeColor : '#D1D5DB',
-                fontFamily: 'NotoSansJP_400Regular',
-                opacity: 0.15,
-                // Evitamos padding extra en el kanji de fondo también
-                includeFontPadding: false,
-              }}
+              style={[
+                styles.detailText,
+                { color: isLocked ? colors.text.tertiary : levelColor.primary }
+              ]}
             >
-              {module.kanji}
+              {module.detail}
             </Text>
           </View>
 
-          {/* TITULO (Pegado arriba) */}
-          <View>
-            <Text
-              style={{
-                fontFamily: 'NotoSansJP_700Bold',
-                fontSize: 18,
-                // El lineHeight cercano al fontSize evita espacios fantasma
-                lineHeight: 22, 
-                color: (isCompleted || isInProgress || isAccessible) ? themeColor : '#6B7280',
-                // Propiedad clave para Android: elimina el relleno interno de la fuente
-                includeFontPadding: false, 
-                // Aseguramos que no haya margen por defecto
-                marginBottom: 0,
-                marginTop: 0,
-              }}
-              numberOfLines={1}
-            >
-              {module.title}
-            </Text>
-          </View>
+          <View style={styles.cardBottom}>
+            <View style={styles.textGroup}>
+              <Text
+                style={[
+                  styles.moduleTitle,
+                  { color: isLocked ? colors.text.tertiary : colors.text.primary },
+                ]}
+              >
+                {module.title}
+              </Text>
+              <Text
+                style={[
+                  styles.moduleSubtitle,
+                  { color: isLocked ? colors.text.tertiary : colors.text.secondary },
+                ]}
+                numberOfLines={1}
+              >
+                {module.subtitle}
+              </Text>
+            </View>
 
-          {/* SUBTITULO + BARRA (Pegados abajo) */}
-          <View style={{ justifyContent: 'flex-end' }}>
-            <Text
-              style={{
-                fontFamily: 'NotoSansJP_400Regular',
-                fontSize: 11,
-                lineHeight: 14, // Ajustado para ser compacto
-                color: '#9CA3AF',
-                includeFontPadding: false,
-                marginBottom: 0,
-              }}
-              numberOfLines={2} 
-            >
-              {module.sub}
-            </Text>
-
-            {/* Si hay barra, se añade debajo. El bloque entero se alinea al fondo */}
-            {isInProgress && (
-              <View style={{ marginTop: 8, height: 4, backgroundColor: themeColor + '30', borderRadius: 2 }}>
-                <View style={{ width: `${module.progress * 100}%`, height: '100%', backgroundColor: themeColor, borderRadius: 2 }} />
+            {/* Barra de progreso */}
+            {module.progress > 0 && (
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressTrack, { backgroundColor: levelColor.light }]}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: `${module.progress * 100}%`,
+                        backgroundColor: levelColor.primary,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressText, { color: levelColor.primary }]}>
+                  {Math.round(module.progress * 100)}%
+                </Text>
               </View>
             )}
           </View>
-        </View>
-      </TouchableRipple>
-    </Surface>
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
   );
 };
+
+export default function LevelScreen() {
+  const router = useRouter();
+  const { id } = useLocalSearchParams();
+  const levelId = (Array.isArray(id) ? id[0] : id) || "n5";
+
+  const levelColor = colors.levels[levelId as keyof typeof colors.levels] || colors.levels.n5;
+  const levelInfo = LEVEL_INFO[levelId as keyof typeof LEVEL_INFO] || LEVEL_INFO.n5;
+
+  const handleModulePress = (route: string) => {
+    router.push(route as any);
+  };
+
+  const headerHeight = 100;
+  const safeAreaTop = 50;
+  const bottomPadding = 30;
+  const availableHeight = height - headerHeight - safeAreaTop - bottomPadding;
+  const cardHeight = (availableHeight - spacing.md * 2) / 3;
+  const cardWidth = (width - spacing.screen * 2 - spacing.md) / 2;
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <StatusBar style="light" />
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.content}>
+        {/* Header limpio y armonioso */}
+        <Animated.View entering={headerEnter()} style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={[styles.levelBadge, { backgroundColor: levelColor.light }]}>
+              <Text style={[styles.levelBadgeText, { color: levelColor.primary }]}>
+                {levelId.toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.titleContainer}>
+              <Text style={styles.levelName}>{levelInfo.name}</Text>
+              <Text style={styles.levelSubtitle}>{levelInfo.subtitle}</Text>
+            </View>
+          </View>
+          <Text style={[styles.levelKanji, { color: levelColor.primary }]}>
+            {levelInfo.kanji}
+          </Text>
+        </Animated.View>
+
+        {/* Grid de módulos */}
+        <View style={styles.modulesContainer}>
+          {/* Fila 1 */}
+          <View style={styles.moduleRow}>
+            {MODULES.slice(0, 2).map((module, index) => (
+              <View key={module.id} style={{ width: cardWidth, height: cardHeight }}>
+                <ModuleCard
+                  module={module}
+                  index={index}
+                  levelColor={levelColor}
+                  onPress={() => handleModulePress(module.route)}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* Fila 2 */}
+          <View style={styles.moduleRow}>
+            {MODULES.slice(2, 4).map((module, index) => (
+              <View key={module.id} style={{ width: cardWidth, height: cardHeight }}>
+                <ModuleCard
+                  module={module}
+                  index={index + 2}
+                  levelColor={levelColor}
+                  onPress={() => handleModulePress(module.route)}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* Fila 3 */}
+          <View style={styles.moduleRow}>
+            {MODULES.slice(4, 6).map((module, index) => (
+              <View key={module.id} style={{ width: cardWidth, height: cardHeight }}>
+                <ModuleCard
+                  module={module}
+                  index={index + 4}
+                  levelColor={levelColor}
+                  onPress={() => handleModulePress(module.route)}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: spacing.screen,
+  },
+
+  // Header - diseño horizontal limpio
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.lg,
+    flex: 1,
+  },
+  levelBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+  },
+  levelBadgeText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 12,
+    includeFontPadding: false,
+    letterSpacing: 0.8,
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  levelName: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 28,
+    color: colors.text.primary,
+    includeFontPadding: false,
+    letterSpacing: -0.5,
+    lineHeight: 34,
+  },
+  levelSubtitle: {
+    fontFamily: "NotoSansJP_400Regular",
+    fontSize: 14,
+    color: colors.text.secondary,
+    includeFontPadding: false,
+    marginTop: 2,
+  },
+  levelKanji: {
+    fontFamily: "NotoSansJP_400Regular",
+    fontSize: 52,
+    includeFontPadding: false,
+    lineHeight: 52,
+    marginLeft: spacing.md,
+  },
+
+  // Grid de módulos
+  modulesContainer: {
+    flex: 1,
+    gap: spacing.md,
+  },
+  moduleRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+
+  // Tarjetas de módulos - diseño limpio
+  moduleWrapper: {
+    flex: 1,
+  },
+  moduleCard: {
+    flex: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg + 4,
+    justifyContent: "space-between",
+  },
+
+  // Parte superior de la tarjeta (icono + detalle)
+  cardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+
+  // Parte inferior de la tarjeta (textos + progreso)
+  cardBottom: {
+    gap: spacing.sm,
+  },
+  textGroup: {
+    gap: 4,
+  },
+  moduleTitle: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 18,
+    includeFontPadding: false,
+    letterSpacing: -0.2,
+    lineHeight: 24,
+  },
+  moduleSubtitle: {
+    fontFamily: "NotoSansJP_400Regular",
+    fontSize: 12,
+    includeFontPadding: false,
+    lineHeight: 16,
+    opacity: 0.8,
+  },
+
+  // Texto de detalle
+  detailText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 11,
+    includeFontPadding: false,
+    letterSpacing: 0.3,
+    opacity: 0.7,
+  },
+
+  // Progreso
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  progressText: {
+    fontFamily: "NotoSansJP_700Bold",
+    fontSize: 10,
+    includeFontPadding: false,
+    letterSpacing: 0.3,
+    opacity: 0.8,
+  },
+});

@@ -1,49 +1,146 @@
 // app/_layout.tsx
-import { Stack } from "expo-router";
-import { PaperProvider } from "react-native-paper";
-import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, LogBox, View } from "react-native";
+
+import { ActivityIndicator, View } from 'react-native';
+import { MD3LightTheme, PaperProvider } from 'react-native-paper';
 import {
-  useFonts,
-  NotoSansJP_400Regular,
-  NotoSansJP_700Bold,
-} from "@expo-google-fonts/noto-sans-jp";
-import { theme } from "../src/core/theme";
-
-// Opcional: ignorar algunos warnings ruidosos
-LogBox.ignoreLogs([
-  "SafeAreaView has been removed and will be removed in a future release",
-]);
-
-export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
     NotoSansJP_400Regular,
     NotoSansJP_700Bold,
-  });
+    useFonts,
+} from '@expo-google-fonts/noto-sans-jp';
 
-  if (!fontsLoaded) {
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { colors } from '@/src/design/tokens';
+
+// Tema personalizado
+const theme = {
+    ...MD3LightTheme,
+    colors: {
+        ...MD3LightTheme.colors,
+        primary: colors.navbar.active,
+        background: colors.bg,
+        surface: colors.surface,
+        onSurface: colors.text.primary,
+    },
+};
+
+export default function RootLayout() {
+    const [fontsLoaded] = useFonts({
+        NotoSansJP_400Regular,
+        NotoSansJP_700Bold,
+    });
+
+    if (!fontsLoaded) {
+        return (
+            <View
+                style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: colors.bg,
+                }}
+            >
+                <ActivityIndicator size="large" color={colors.navbar.active} />
+            </View>
+        );
+    }
+
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#FFF1F2",
-        }}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+        <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+            <PaperProvider theme={theme}>
+                <StatusBar style="dark" />
+                <Stack
+                    screenOptions={{
+                        headerShown: false,
+                        contentStyle: { backgroundColor: colors.bg },
+                        animation: 'default',
+                        gestureEnabled: true,
+                        fullScreenGestureEnabled: true,
+                    }}
+                >
+                    <Stack.Screen
+                        name="index"
+                        options={{
+                            animation: 'fade',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="levels/[id]"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="learn/index"
+                        options={{
+                            animation: 'fade',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="achievements/index"
+                        options={{
+                            animation: 'fade',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="profile/index"
+                        options={{
+                            animation: 'fade',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/kana/index"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/kana/practice/index"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/vocab/index"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/vocab/category/[id]"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/vocab/practice/[category]"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="modules/vocab/word/[id]"
+                        options={{
+                            animation: 'slide_from_right',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                    <Stack.Screen
+                        name="stats/streak"
+                        options={{
+                            animation: 'slide_from_bottom',
+                            animationTypeForReplace: 'pop',
+                        }}
+                    />
+                </Stack>
+            </PaperProvider>
+        </GestureHandlerRootView>
     );
-  }
-
-  return (
-    <PaperProvider theme={theme}>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      />
-    </PaperProvider>
-  );
 }
